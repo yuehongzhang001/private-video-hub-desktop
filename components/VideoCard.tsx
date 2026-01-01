@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { VideoItem } from '../types';
 import { PREVIEW_DELAY } from '../constants';
@@ -12,9 +13,9 @@ interface VideoCardProps {
 export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: VideoCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
   const [progressWidth, setProgressWidth] = useState(0);
   const hoverTimer = useRef<number | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,13 +39,17 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
 
   const handleMouseEnter = () => {
     setIsHovered(true);
+    setPreviewReady(false);
     requestAnimationFrame(() => setProgressWidth(100));
-    hoverTimer.current = window.setTimeout(() => setShowPreview(true), PREVIEW_DELAY);
+    hoverTimer.current = window.setTimeout(() => {
+      setShowPreview(true);
+    }, PREVIEW_DELAY);
   };
 
   const handleMouseLeave = () => {
     setIsHovered(false);
     setShowPreview(false);
+    setPreviewReady(false);
     setProgressWidth(0);
     if (hoverTimer.current) {
       clearTimeout(hoverTimer.current);
@@ -60,9 +65,11 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
     return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  // 使用 URL 锚点 #t=... 实现快速预览
   const previewUrl = useMemo(() => {
     if (!isHovered) return "";
-    const startTime = (video.duration !== undefined && video.duration < 10) ? 0 : 10;
+    // 尽量避开片头黑屏，如果总时长很短则从头播放
+    const startTime = (video.duration !== undefined && video.duration < 15) ? 1 : 10;
     return `${video.url}#t=${startTime}`;
   }, [video.url, video.duration, isHovered]);
 
@@ -72,31 +79,32 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       style={{ 
         contentVisibility: 'auto',
         containIntrinsicSize: '0 280px',
-        willChange: isHovered ? 'transform' : 'auto'
+        transform: 'translateZ(0)', // 硬件加速
       }}
       className="group relative flex flex-col bg-zinc-900 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/60 border border-zinc-800 hover:border-indigo-500/50"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={() => onClick(video)}
     >
-      {/* 使用 4:3 比例，对竖版视频更友好 */}
       <div className="aspect-[4/3] relative bg-black overflow-hidden">
+        {/* 缩略图层：始终存在，除非预览完全准备好才考虑降低透明度 */}
         {video.thumbnail ? (
           <img 
             src={video.thumbnail} 
             alt={video.name}
             loading="lazy"
             decoding="async"
-            className={`w-full h-full object-contain transition-opacity duration-300 ${showPreview ? 'opacity-0' : 'opacity-100'}`}
+            className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${(showPreview && previewReady) ? 'opacity-30' : 'opacity-100'}`}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center">
             <div className="w-6 h-6 border-2 border-zinc-700 border-t-zinc-200 rounded-full animate-spin" />
           </div>
         )}
 
+        {/* 悬停进度条：在等待预览加载时显示 */}
         {isHovered && !showPreview && (
-          <div className="absolute top-0 left-0 w-full h-1 bg-zinc-800/50 z-20">
+          <div className="absolute top-0 left-0 w-full h-0.5 bg-zinc-800/50 z-20">
             <div 
               className="h-full bg-indigo-500 transition-all ease-linear"
               style={{ 
@@ -107,19 +115,22 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
           </div>
         )}
 
-        {showPreview && previewUrl && (
+        {/* 预览视频层：置于缩略图之上，通过 opacity 渐现 */}
+        {isHovered && previewUrl && (
           <video
-            ref={videoRef}
             src={previewUrl}
             autoPlay
             muted
             loop
+            playsInline
             disablePictureInPicture
-            className="absolute inset-0 w-full h-full object-contain bg-black"
+            // onPlaying 确保视频已经开始播放（已完成 seek 并渲染出帧）
+            onPlaying={() => setPreviewReady(true)}
+            className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity duration-700 z-10 ${showPreview && previewReady ? 'opacity-100' : 'opacity-0'}`}
           />
         )}
 
-        <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-[10px] font-bold text-white backdrop-blur-md z-10 border border-white/10">
+        <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-[10px] font-bold text-white backdrop-blur-md z-20 border border-white/10">
           {formatDuration(video.duration)}
         </div>
       </div>

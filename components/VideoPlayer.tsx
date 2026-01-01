@@ -29,6 +29,7 @@ const PlaylistItem = React.memo(({
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
   const [progressWidth, setProgressWidth] = useState(0);
   const hoverTimer = useRef<number | null>(null);
   const itemRef = useRef<HTMLDivElement>(null);
@@ -52,6 +53,7 @@ const PlaylistItem = React.memo(({
 
   const handleMouseEnter = () => {
     setIsHovered(true);
+    setPreviewReady(false);
     setTimeout(() => { if (hoverTimer.current) setProgressWidth(100); }, 10);
     hoverTimer.current = window.setTimeout(() => setShowPreview(true), PREVIEW_DELAY);
   };
@@ -59,19 +61,21 @@ const PlaylistItem = React.memo(({
   const handleMouseLeave = () => {
     setIsHovered(false);
     setShowPreview(false);
+    setPreviewReady(false);
     setProgressWidth(0);
     if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null; }
   };
 
   const previewUrl = useMemo(() => {
-    const startTime = (v.duration !== undefined && v.duration < 10) ? 0 : 10;
+    if (!isHovered) return "";
+    const startTime = (v.duration !== undefined && v.duration < 15) ? 1 : 10;
     return `${v.url}#t=${startTime}`;
-  }, [v.url, v.duration]);
+  }, [v.url, v.duration, isHovered]);
 
   return (
     <div 
       ref={itemRef}
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 100px' }}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 100px', transform: 'translateZ(0)' }}
       onClick={onClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -79,21 +83,32 @@ const PlaylistItem = React.memo(({
     >
       <div className="aspect-[4/3] bg-black rounded-lg overflow-hidden relative border border-zinc-800 shadow-md">
         {v.thumbnail ? (
-          <img src={v.thumbnail} loading="lazy" decoding="async" className={`w-full h-full object-contain transition-opacity duration-300 ${showPreview ? 'opacity-0' : (isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100')}`} alt="" />
+          <img src={v.thumbnail} loading="lazy" decoding="async" className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${(showPreview && previewReady) ? 'opacity-30' : (isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100')}`} alt="" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center">
             <div className="w-4 h-4 border-2 border-zinc-800 border-t-zinc-600 rounded-full animate-spin"/>
           </div>
         )}
+        
         {isHovered && !showPreview && (
-          <div className="absolute top-0 left-0 w-full h-1 bg-zinc-800/50 z-20">
+          <div className="absolute top-0 left-0 w-full h-0.5 bg-zinc-800/50 z-20">
             <div className="h-full bg-indigo-500 transition-all ease-linear" style={{ width: `${progressWidth}%`, transitionDuration: progressWidth > 0 ? `${PREVIEW_DELAY}ms` : '0ms' }} />
           </div>
         )}
-        {showPreview && (
-          <video src={previewUrl} autoPlay muted loop className="absolute inset-0 w-full h-full object-contain bg-black" />
+        
+        {isHovered && previewUrl && (
+          <video 
+            src={previewUrl} 
+            autoPlay 
+            muted 
+            loop 
+            playsInline
+            onPlaying={() => setPreviewReady(true)}
+            className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity duration-700 z-10 ${(showPreview && previewReady) ? 'opacity-100' : 'opacity-0'}`} 
+          />
         )}
-        <div className="absolute bottom-1 right-1 text-[8px] bg-black/90 px-1.5 py-0.5 rounded text-zinc-200 font-black tracking-tighter z-10 border border-white/5">
+        
+        <div className="absolute bottom-1 right-1 text-[8px] bg-black/90 px-1.5 py-0.5 rounded text-zinc-200 font-black tracking-tighter z-20 border border-white/5">
           {formatDuration(v.duration)}
         </div>
       </div>
