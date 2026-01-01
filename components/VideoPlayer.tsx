@@ -427,7 +427,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
               {formatDuration(videoRef.current?.currentTime)} <span className="text-zinc-700">/</span> {formatDuration(video.duration)}
             </div>
             <button onClick={() => { toggleFullscreen(); resetHideTimer(true); }} className="bg-white text-black hover:bg-zinc-200 p-2.5 rounded-full transition-all shadow-xl">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {isFullscreen ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                )}
+              </svg>
             </button>
           </div>
         </div>
