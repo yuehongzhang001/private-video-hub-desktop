@@ -75,13 +75,13 @@ const PlaylistItem = React.memo(({
   return (
     <div 
       ref={itemRef}
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 100px', transform: 'translateZ(0)' }}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 80px', transform: 'translateZ(0)' }}
       onClick={onClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       className={`flex flex-col p-2.5 cursor-pointer transition-all border-b border-zinc-900/50 group ${isActive ? 'bg-indigo-600/15 border-l-4 border-l-indigo-500' : 'hover:bg-white/5'}`}
     >
-      <div className="aspect-[4/3] bg-black rounded-lg overflow-hidden relative border border-zinc-800 shadow-md">
+      <div className="aspect-[16/9] bg-black rounded-lg overflow-hidden relative border border-zinc-800 shadow-md" style={{ aspectRatio: '16 / 9' }}>
         {v.thumbnail ? (
           <img src={v.thumbnail} loading="lazy" decoding="async" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${(showPreview && previewReady) ? 'opacity-30' : (isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100')}`} alt="" />
         ) : (

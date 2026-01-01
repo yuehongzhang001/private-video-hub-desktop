@@ -76,7 +76,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       ref={cardRef}
       style={{ 
         contentVisibility: 'auto',
-        containIntrinsicSize: '0 280px',
+        containIntrinsicSize: '0 240px',
         transform: 'translateZ(0)',
       }}
       className="group relative flex flex-col bg-zinc-900 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/60 border border-zinc-800 hover:border-indigo-500/50"
@@ -84,7 +84,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       onMouseLeave={handleMouseLeave}
       onClick={() => onClick(video)}
     >
-      <div className="aspect-[4/3] relative bg-black overflow-hidden">
+      <div className="aspect-[16/9] relative bg-black overflow-hidden" style={{ aspectRatio: '16 / 9' }}>
         {video.thumbnail ? (
           <img 
             src={video.thumbnail} 
