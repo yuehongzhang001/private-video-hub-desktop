@@ -156,141 +156,140 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-zinc-950 select-none overflow-hidden font-sans">
-      <header className="h-16 border-b border-zinc-800 flex items-center px-6 gap-6 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-20">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-indigo-600 rounded flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" /></svg>
+      <header className="h-20 border-b border-zinc-800 flex items-center px-8 gap-8 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-20">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded flex items-center justify-center shadow-lg shadow-indigo-500/20">
+            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" /></svg>
           </div>
-          <h1 className="text-lg font-black tracking-tighter text-white hidden sm:block italic text-nowrap">PRIVATE VIDEO HUB</h1>
+          <h1 className="text-xl font-black tracking-tighter text-white hidden sm:block italic text-nowrap">PRIVATE VIDEO HUB</h1>
         </div>
 
-        <div className="flex-1 max-w-xl relative group/search">
+        <div className="flex-1 max-w-2xl relative group/search">
           <input 
             type="text" placeholder={t.searchPlaceholder} 
             value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-full pl-10 pr-10 py-2 text-sm text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 transition-all outline-none placeholder:text-zinc-600"
+            className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-full pl-12 pr-12 py-3 text-base text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 transition-all outline-none placeholder:text-zinc-600"
           />
-          <svg className="w-4 h-4 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+          <svg className="w-5 h-5 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-white transition-all rounded-full hover:bg-zinc-700/50">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+            <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-white transition-all rounded-full hover:bg-zinc-700/50">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <button 
             onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-            className="px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-zinc-800/50 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg"
+            className="px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-800/50 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg"
           >
             {lang === 'zh' ? 'EN' : '中'}
           </button>
           {videos.length > 0 && (
             <button 
               onClick={clearLibrary}
-              className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap shadow-lg border ${
+              className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap shadow-lg border ${
                 isConfirmingClear ? 'bg-red-600 border-red-400 text-white animate-pulse' : 'bg-zinc-800/50 border-zinc-700 hover:bg-zinc-700 text-zinc-400 hover:text-white'
               }`}
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6" /></svg>
               {isConfirmingClear ? t.confirmClear : t.clearList}
             </button>
           )}
           <div className="flex flex-col items-end">
-            <label className="cursor-pointer bg-white hover:bg-zinc-200 text-black px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl shadow-white/5 whitespace-nowrap">
+            <label className="cursor-pointer bg-white hover:bg-zinc-200 text-black px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl shadow-white/5 whitespace-nowrap">
               <input type="file" multiple {...({ webkitdirectory: "", directory: "" } as any)} onChange={handleFiles} className="hidden" />
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
               {t.importFolder}
             </label>
-            <span className="text-[7px] text-zinc-600 font-bold uppercase tracking-wider mt-1 mr-1">{t.localPlayback}</span>
+            <span className="text-[9px] text-zinc-600 font-bold uppercase tracking-wider mt-1 mr-1">{t.localPlayback}</span>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-zinc-950 to-black">
+      <main className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-zinc-950 to-black">
         {isProcessing ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4">
-            <div className="w-12 h-12 border-4 border-zinc-800 border-t-indigo-500 rounded-full animate-spin shadow-lg shadow-indigo-500/20" />
+          <div className="flex flex-col items-center justify-center h-full gap-6">
+            <div className="w-16 h-16 border-4 border-zinc-800 border-t-indigo-500 rounded-full animate-spin shadow-lg shadow-indigo-500/20" />
             <div className="text-center">
-               <p className="text-zinc-200 font-black text-xs uppercase tracking-widest animate-pulse">{t.organizing}</p>
-               <p className="text-zinc-600 text-[10px] mt-1 uppercase">{t.localOnly}</p>
+               <p className="text-zinc-200 font-black text-sm uppercase tracking-widest animate-pulse">{t.organizing}</p>
+               <p className="text-zinc-600 text-xs mt-1 uppercase">{t.localOnly}</p>
             </div>
           </div>
         ) : videos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center space-y-8">
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-10">
             <div className="relative">
-              <div className="w-32 h-32 bg-zinc-900/50 rounded-full flex items-center justify-center border border-zinc-800 shadow-inner">
-                 <svg className="w-12 h-12 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2-2v8a2 2 0 002 2z" /></svg>
+              <div className="w-40 h-40 bg-zinc-900/50 rounded-full flex items-center justify-center border border-zinc-800 shadow-inner">
+                 <svg className="w-16 h-16 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2-2v8a2 2 0 002 2z" /></svg>
               </div>
-              <div className="absolute -bottom-2 -right-2 bg-indigo-600 rounded-full p-2 border-4 border-zinc-950">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              <div className="absolute -bottom-3 -right-3 bg-indigo-600 rounded-full p-3 border-4 border-zinc-950">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
               </div>
             </div>
             
-            <div className="max-w-xl space-y-6">
-              <div className="space-y-2">
-                <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tighter uppercase italic leading-tight">
+            <div className="max-w-2xl space-y-8">
+              <div className="space-y-3">
+                <h2 className="text-4xl sm:text-6xl font-black text-white tracking-tighter uppercase italic leading-tight">
                   {t.landingHeader}
                 </h2>
-                <p className="text-indigo-500 text-xs font-black uppercase tracking-[0.4em] mt-3">
+                <p className="text-indigo-500 text-sm font-black uppercase tracking-[0.4em] mt-4">
                   {t.landingSubtitle}
                 </p>
               </div>
 
-              {/* Instructions above cards as requested */}
-              <div className="bg-white/5 p-6 rounded-xl text-left border border-white/5 shadow-2xl backdrop-blur-sm">
-                 <p className="text-zinc-400 text-xs leading-relaxed">
-                   <span className="text-white font-bold block mb-2 underline decoration-indigo-500 underline-offset-4 text-sm">{t.instructionsTitle}</span>
+              <div className="bg-white/5 p-8 rounded-2xl text-left border border-white/5 shadow-2xl backdrop-blur-sm">
+                 <p className="text-zinc-400 text-sm leading-relaxed">
+                   <span className="text-white font-bold block mb-3 underline decoration-indigo-500 underline-offset-4 text-base">{t.instructionsTitle}</span>
                    {t.instructionsDesc}
                  </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-                <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
-                  <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center mb-3">
-                    <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M2.166 4.9L10 1.55l7.834 3.35a1 1 0 01.666.92v6.57a1 1 0 01-.544.894l-7.5 3.75a1 1 0 01-.912 0l-7.5-3.75A1 1 0 012 12.42V5.82a1 1 0 01.666-.92z" /></svg>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                <div className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
+                  <div className="w-10 h-10 bg-emerald-500/10 rounded-lg flex items-center justify-center mb-4">
+                    <svg className="w-5 h-5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M2.166 4.9L10 1.55l7.834 3.35a1 1 0 01.666.92v6.57a1 1 0 01-.544.894l-7.5 3.75a1 1 0 01-.912 0l-7.5-3.75A1 1 0 012 12.42V5.82a1 1 0 01.666-.92z" /></svg>
                   </div>
-                  <h4 className="text-white text-xs font-black uppercase tracking-wider mb-1">{t.privacyTitle}</h4>
-                  <p className="text-zinc-500 text-[10px] leading-relaxed">{t.privacyDesc}</p>
+                  <h4 className="text-white text-sm font-black uppercase tracking-wider mb-2">{t.privacyTitle}</h4>
+                  <p className="text-zinc-500 text-xs leading-relaxed">{t.privacyDesc}</p>
                 </div>
-                <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
-                  <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center mb-3">
-                    <svg className="w-4 h-4 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>
+                <div className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
+                  <div className="w-10 h-10 bg-indigo-500/10 rounded-lg flex items-center justify-center mb-4">
+                    <svg className="w-5 h-5 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>
                   </div>
-                  <h4 className="text-white text-xs font-black uppercase tracking-wider mb-1">{t.previewTitle}</h4>
-                  <p className="text-zinc-500 text-[10px] leading-relaxed">{t.previewDesc}</p>
+                  <h4 className="text-white text-sm font-black uppercase tracking-wider mb-2">{t.previewTitle}</h4>
+                  <p className="text-zinc-500 text-xs leading-relaxed">{t.previewDesc}</p>
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-zinc-800 pb-4 gap-4">
-              <div className="flex items-center gap-3">
-                <span className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest">
+          <div className="space-y-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-zinc-800 pb-6 gap-6">
+              <div className="flex items-center gap-4">
+                <span className="text-zinc-600 text-xs font-bold uppercase tracking-widest">
                   {t.videoCount(filteredAndSortedVideos.length, currentPage, totalPages)}
                 </span>
               </div>
-              <div className="flex items-center gap-6">
-                <div className="hidden md:flex items-center gap-2">
-                  <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">{t.displaySize}</span>
-                  <div className="flex bg-zinc-900 rounded-full p-1 border border-zinc-800 shadow-inner">
+              <div className="flex items-center gap-8">
+                <div className="hidden md:flex items-center gap-3">
+                  <span className="text-zinc-600 text-xs font-black uppercase tracking-widest">{t.displaySize}</span>
+                  <div className="flex bg-zinc-900 rounded-full p-1.5 border border-zinc-800 shadow-inner">
                     {[
                       { num: 4, label: t.sizeLarge },
                       { num: 6, label: t.sizeSmall }
                     ].map(option => (
                       <button key={option.num} onClick={() => setColumnCount(option.num)}
-                        className={`px-4 py-1 text-[10px] font-black rounded-full transition-all ${columnCount === option.num ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
+                        className={`px-5 py-1.5 text-xs font-black rounded-full transition-all ${columnCount === option.num ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
                       >
                         {option.label}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">{t.sort}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-zinc-600 text-xs font-black uppercase tracking-widest">{t.sort}</span>
                   <select value={sortMode} onChange={(e) => setSortMode(e.target.value as SortMode)}
-                    className="bg-zinc-900 border border-zinc-800 text-zinc-400 text-[10px] font-bold uppercase tracking-wider rounded px-2 py-1 outline-none focus:ring-1 focus:ring-indigo-500 hover:text-white transition-colors cursor-pointer"
+                    className="bg-zinc-900 border border-zinc-800 text-zinc-400 text-xs font-bold uppercase tracking-wider rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500/50 hover:text-white transition-colors cursor-pointer"
                   >
                     <option value={SortMode.NEWEST}>{t.sortByDate}</option>
                     <option value={SortMode.SIZE}>{t.sortBySize}</option>
@@ -300,7 +299,7 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridDesktopClass} gap-6`}>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridDesktopClass} gap-8`}>
               {paginatedVideos.map((video) => (
                 <VideoCard 
                   key={video.id} 
@@ -312,15 +311,15 @@ const App: React.FC = () => {
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-4 mt-12 py-8 border-t border-zinc-800/50">
+              <div className="flex items-center justify-center gap-6 mt-16 py-10 border-t border-zinc-800/50">
                 <button
                   disabled={currentPage === 1}
                   onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                  className="p-3 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-30 transition-all shadow-lg"
+                  className="p-4 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-30 transition-all shadow-lg"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
                 </button>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-2">
                   {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
                     let pageNum;
                     if (totalPages <= 7) pageNum = i + 1;
@@ -330,7 +329,7 @@ const App: React.FC = () => {
                     
                     return (
                       <button key={pageNum} onClick={() => { setCurrentPage(pageNum); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                        className={`w-10 h-10 rounded-lg text-xs font-black transition-all ${currentPage === pageNum ? 'bg-indigo-600 text-white shadow-lg' : 'bg-zinc-900 text-zinc-500 hover:text-white'}`}
+                        className={`w-12 h-12 rounded-xl text-sm font-black transition-all ${currentPage === pageNum ? 'bg-indigo-600 text-white shadow-lg scale-110' : 'bg-zinc-900 text-zinc-500 hover:text-white'}`}
                       >
                         {pageNum}
                       </button>
@@ -340,9 +339,9 @@ const App: React.FC = () => {
                 <button
                   disabled={currentPage === totalPages}
                   onClick={() => { setCurrentPage(prev => Math.min(totalPages, prev + 1)); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                  className="p-3 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-30 transition-all shadow-lg"
+                  className="p-4 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-30 transition-all shadow-lg"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
                 </button>
               </div>
             )}
@@ -350,10 +349,10 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <footer className="h-8 bg-black border-t border-zinc-900 px-6 flex items-center justify-between text-[8px] text-zinc-700 font-bold uppercase tracking-[0.2em]">
-        <div className="flex items-center gap-6">
-          <span className="flex items-center gap-1.5 text-emerald-500"><div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"/> {t.localReady}</span>
-          <span className="flex items-center gap-1"><svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> {t.privacyProtected}</span>
+      <footer className="h-10 bg-black border-t border-zinc-900 px-8 flex items-center justify-between text-xs text-zinc-700 font-bold uppercase tracking-[0.2em]">
+        <div className="flex items-center gap-8">
+          <span className="flex items-center gap-2 text-emerald-500"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/> {t.localReady}</span>
+          <span className="flex items-center gap-1.5"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> {t.privacyProtected}</span>
           <span>FPS: <span className={fps < 30 ? 'text-red-900' : 'text-zinc-500'}>{fps}</span></span>
         </div>
         <div className="hidden sm:block">LOCAL-FIRST MEDIA CORE</div>

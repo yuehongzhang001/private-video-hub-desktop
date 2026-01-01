@@ -76,10 +76,10 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       ref={cardRef}
       style={{ 
         contentVisibility: 'auto',
-        containIntrinsicSize: '0 240px',
+        containIntrinsicSize: '0 280px',
         transform: 'translateZ(0)',
       }}
-      className="group relative flex flex-col bg-zinc-900 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/60 border border-zinc-800 hover:border-indigo-500/50"
+      className="group relative flex flex-col bg-zinc-900 rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/60 border border-zinc-800 hover:border-indigo-500/50"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={() => onClick(video)}
@@ -95,12 +95,12 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
           />
         ) : (
           <div className="absolute inset-0 w-full h-full flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-zinc-700 border-t-zinc-200 rounded-full animate-spin" />
+            <div className="w-8 h-8 border-2 border-zinc-700 border-t-zinc-200 rounded-full animate-spin" />
           </div>
         )}
 
         {isHovered && !showPreview && (
-          <div className="absolute top-0 left-0 w-full h-0.5 bg-zinc-800/50 z-20">
+          <div className="absolute top-0 left-0 w-full h-1 bg-zinc-800/50 z-20">
             <div 
               className="h-full bg-indigo-500 transition-all ease-linear"
               style={{ 
@@ -124,20 +124,20 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
           />
         )}
 
-        <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-[10px] font-bold text-white backdrop-blur-md z-20 border border-white/10">
+        <div className="absolute bottom-3 right-3 bg-black/80 px-3 py-1 rounded-lg text-xs font-bold text-white backdrop-blur-md z-20 border border-white/10">
           {formatDuration(video.duration)}
         </div>
       </div>
 
-      <div className="p-3 bg-gradient-to-b from-zinc-900 to-zinc-950">
-        <h3 className="text-sm font-bold text-zinc-200 truncate group-hover:text-white transition-colors" title={video.name}>
+      <div className="p-4 bg-gradient-to-b from-zinc-900 to-zinc-950">
+        <h3 className="text-base font-bold text-zinc-200 truncate group-hover:text-white transition-colors" title={video.name}>
           {video.name}
         </h3>
-        <div className="flex items-center justify-between mt-1">
-          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">
+        <div className="flex items-center justify-between mt-2">
+          <p className="text-xs text-zinc-500 font-bold uppercase tracking-tight">
             {(video.size / (1024 * 1024)).toFixed(1)} MB
           </p>
-          <div className="text-[9px] text-zinc-600 font-black uppercase">MP4</div>
+          <div className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">MP4</div>
         </div>
       </div>
     </div>
