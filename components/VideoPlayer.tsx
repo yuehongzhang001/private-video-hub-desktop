@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { VideoItem, SortMode, DisplaySize } from '../types';
 import { PREVIEW_DELAY } from '../constants';
@@ -358,9 +359,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
               type="range" min="0" max="100" step="0.01" 
               value={displayProgress} 
               onMouseDown={() => { isUserSeeking.current = true; }}
-              onMouseUp={() => { isUserSeeking.current = false; resetHideTimer(true); }}
+              onMouseUp={(e) => { 
+                isUserSeeking.current = false; 
+                resetHideTimer(true); 
+                (e.target as HTMLInputElement).blur();
+              }}
               onChange={handleProgressChange}
-              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all hover:h-2" 
+              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all hover:h-2 outline-none focus:outline-none" 
             />
           </div>
           <div className="flex items-center gap-6 text-zinc-300">
@@ -387,7 +392,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
                   type="range" min="0" max="1" step="0.01" 
                   value={isMuted ? 0 : volume} 
                   onChange={(e) => { setVolume(parseFloat(e.target.value)); setIsMuted(false); resetHideTimer(true); }} 
-                  className="w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all opacity-0 group-hover/volume:opacity-100 focus:opacity-100" 
+                  onMouseUp={(e) => (e.target as HTMLInputElement).blur()}
+                  className="w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all opacity-0 group-hover/volume:opacity-100 focus:opacity-100 outline-none focus:outline-none" 
                 />
               </div>
             </div>
