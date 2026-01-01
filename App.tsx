@@ -5,6 +5,7 @@ import { SUPPORTED_VIDEO_EXTENSIONS } from './constants';
 import { VideoCard } from './components/VideoCard';
 import { VideoPlayer } from './components/VideoPlayer';
 import { translations, Language } from './translations';
+import { thumbnailService } from './services/ThumbnailService';
 
 const GRID_COLUMNS_STORAGE_KEY = 'vhub-column-count';
 const LANG_STORAGE_KEY = 'vhub-lang';
@@ -28,7 +29,6 @@ const App: React.FC = () => {
   const [columnCount, setColumnCount] = useState<number>(() => {
     const saved = localStorage.getItem(GRID_COLUMNS_STORAGE_KEY);
     const val = saved ? parseInt(saved, 10) : 4;
-    // 过滤掉不再支持的 8 列选项
     return (val === 4 || val === 6) ? val : 4;
   });
 
@@ -74,6 +74,7 @@ const App: React.FC = () => {
       return;
     }
     videos.forEach(v => URL.revokeObjectURL(v.url));
+    thumbnailService.clearCache();
     setVideos([]);
     setActiveVideoId(null);
     setIsConfirmingClear(false);
@@ -86,7 +87,7 @@ const App: React.FC = () => {
 
     setIsProcessing(true);
     const newVideos: VideoItem[] = [];
-    const batchSize = 50;
+    const batchSize = 100;
     const files = (Array.from(fileList) as File[]).filter(file => {
       const ext = file.name.slice((file.name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
       return SUPPORTED_VIDEO_EXTENSIONS.includes(`.${ext}`);
@@ -103,7 +104,7 @@ const App: React.FC = () => {
         size: file.size,
         lastModified: file.lastModified,
       });
-      if (i % batchSize === 0) await new Promise(r => setTimeout(r, 0));
+      if (i % batchSize === 0) await new Promise(r => requestAnimationFrame(r));
     }
 
     setVideos(prev => {
@@ -236,28 +237,29 @@ const App: React.FC = () => {
                 </p>
               </div>
 
+              {/* Instructions above cards as requested */}
+              <div className="bg-white/5 p-6 rounded-xl text-left border border-white/5 shadow-2xl backdrop-blur-sm">
+                 <p className="text-zinc-400 text-xs leading-relaxed">
+                   <span className="text-white font-bold block mb-2 underline decoration-indigo-500 underline-offset-4 text-sm">{t.instructionsTitle}</span>
+                   {t.instructionsDesc}
+                 </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-                <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
+                <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
                   <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center mb-3">
                     <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M2.166 4.9L10 1.55l7.834 3.35a1 1 0 01.666.92v6.57a1 1 0 01-.544.894l-7.5 3.75a1 1 0 01-.912 0l-7.5-3.75A1 1 0 012 12.42V5.82a1 1 0 01.666-.92z" /></svg>
                   </div>
                   <h4 className="text-white text-xs font-black uppercase tracking-wider mb-1">{t.privacyTitle}</h4>
                   <p className="text-zinc-500 text-[10px] leading-relaxed">{t.privacyDesc}</p>
                 </div>
-                <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50">
+                <div className="bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/50 hover:bg-zinc-800/50 transition-colors">
                   <div className="w-8 h-8 bg-indigo-500/10 rounded-lg flex items-center justify-center mb-3">
                     <svg className="w-4 h-4 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /></svg>
                   </div>
                   <h4 className="text-white text-xs font-black uppercase tracking-wider mb-1">{t.previewTitle}</h4>
                   <p className="text-zinc-500 text-[10px] leading-relaxed">{t.previewDesc}</p>
                 </div>
-              </div>
-
-              <div className="bg-white/5 p-4 rounded-xl text-left border border-white/5">
-                 <p className="text-zinc-400 text-xs leading-relaxed">
-                   <span className="text-white font-bold block mb-1 underline decoration-indigo-500 underline-offset-4">{t.instructionsTitle}</span>
-                   {t.instructionsDesc}
-                 </p>
               </div>
             </div>
           </div>

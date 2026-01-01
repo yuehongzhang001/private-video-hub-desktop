@@ -21,7 +21,6 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
   useEffect(() => {
     if (video.thumbnail) return;
 
-    // Use IntersectionObserver to only generate thumbnails for visible cards
     const observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
         thumbnailService.generate(video.url, video.id, (dataUrl, duration) => {
@@ -29,7 +28,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
         });
         observer.disconnect();
       }
-    }, { threshold: 0.1, rootMargin: '200px' });
+    }, { threshold: 0.1, rootMargin: '400px' });
 
     if (cardRef.current) observer.observe(cardRef.current);
     return () => observer.disconnect();
@@ -37,7 +36,6 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
 
   const handleMouseEnter = () => {
     setIsHovered(true);
-    // Use a small timeout to ensure the transition from 0% to 100% is visible
     setTimeout(() => {
       if (hoverTimer.current) setProgressWidth(100);
     }, 10);
@@ -75,7 +73,8 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       ref={cardRef}
       style={{ 
         contentVisibility: 'auto',
-        containIntrinsicSize: '0 240px'
+        containIntrinsicSize: '0 240px',
+        willChange: isHovered ? 'transform' : 'auto'
       }}
       className="group relative flex flex-col bg-zinc-900 rounded-lg overflow-hidden cursor-pointer transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl hover:shadow-black/50 border border-zinc-800"
       onMouseEnter={handleMouseEnter}
@@ -116,6 +115,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
             autoPlay
             muted
             loop
+            disablePictureInPicture
             className="absolute inset-0 w-full h-full object-cover"
           />
         )}
