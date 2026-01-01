@@ -133,6 +133,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     return (saved as SortMode) || SortMode.AFTER_CURRENT;
   });
 
+  // Controls Visibility Logic
+  const resetHideTimer = useCallback((forceShow = true) => {
+    if (forceShow) {
+      setShowControls(true);
+    }
+    
+    if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current);
+    
+    // Only set auto-hide timer if video is playing
+    if (isPlaying) {
+      hideControlsTimer.current = window.setTimeout(() => {
+        setShowControls(false);
+      }, AUTO_HIDE_TIMEOUT);
+    }
+  }, [isPlaying]);
+
   const updateLoop = useCallback(() => {
     const v = videoRef.current;
     if (v && !isUserSeeking.current && v.duration > 0 && isFinite(v.duration)) {
@@ -146,16 +162,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [updateLoop]);
 
-  const resetHideTimer = useCallback(() => {
-    setShowControls(true);
-    if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current);
-    if (isPlaying) {
-      hideControlsTimer.current = window.setTimeout(() => setShowControls(false), AUTO_HIDE_TIMEOUT);
-    }
-  }, [isPlaying]);
-
+  // Handle auto-hide when playing state changes
   useEffect(() => {
-    resetHideTimer();
+    resetHideTimer(true);
     return () => { if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current); };
   }, [resetHideTimer, isPlaying]);
 
@@ -172,12 +181,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     }
   }, [volume, isMuted]);
 
-  const togglePlay = () => {
+  // Media Actions
+  const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) videoRef.current.play().catch(() => {});
     else videoRef.current.pause();
-    resetHideTimer();
-  };
+  }, []);
 
   const syncMediaState = () => {
     if (videoRef.current) {
@@ -194,11 +203,96 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     }
   };
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) containerRef.current?.requestFullscreen();
     else document.exitFullscreen();
-    resetHideTimer();
-  };
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    setIsMuted(prev => !prev);
+  }, []);
+
+  const seek = useCallback((seconds: number) => {
+    if (videoRef.current && isFinite(videoRef.current.duration)) {
+      videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration, videoRef.current.currentTime + seconds));
+    }
+  }, []);
+
+  const adjustVolume = useCallback((delta: number) => {
+    setVolume(prev => {
+      const newVal = Math.max(0, Math.min(1, prev + delta));
+      if (newVal > 0) setIsMuted(false);
+      return newVal;
+    });
+  }, []);
+
+  // Keyboard Shortcuts Handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      const keysToHandle = [' ', 'k', 'f', 'm', 'arrowright', 'arrowleft', 'l', 'j', 'arrowup', 'arrowdown', 'escape'];
+      if (!keysToHandle.includes(e.key.toLowerCase())) return;
+
+      // If controls are visible, reset the timer to keep them visible longer
+      // If hidden, resetHideTimer(false) will only clear/set the hide timer without showing the bar
+      const performAction = () => {
+        switch (e.key.toLowerCase()) {
+          case ' ':
+          case 'k':
+            e.preventDefault();
+            togglePlay();
+            break;
+          case 'f':
+            e.preventDefault();
+            toggleFullscreen();
+            break;
+          case 'm':
+            e.preventDefault();
+            toggleMute();
+            break;
+          case 'arrowright':
+            e.preventDefault();
+            seek(5);
+            break;
+          case 'arrowleft':
+            e.preventDefault();
+            seek(-5);
+            break;
+          case 'l':
+            e.preventDefault();
+            seek(10);
+            break;
+          case 'j':
+            e.preventDefault();
+            seek(-10);
+            break;
+          case 'arrowup':
+            e.preventDefault();
+            adjustVolume(0.1);
+            break;
+          case 'arrowdown':
+            e.preventDefault();
+            adjustVolume(-0.1);
+            break;
+          case 'escape':
+            if (!document.fullscreenElement) {
+              onClose();
+            }
+            break;
+        }
+        
+        // Key requirement: Only reset the timer, don't force show if already hidden
+        // Passing false means: "Don't force setShowControls(true), but refresh the auto-hide logic if active"
+        resetHideTimer(false);
+      };
+
+      performAction();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [togglePlay, toggleFullscreen, toggleMute, seek, adjustVolume, onClose, resetHideTimer]);
 
   const sortedPlaylist = useMemo(() => {
     const result = [...allVideos];
@@ -233,7 +327,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
   }, [displaySize]);
 
   return (
-    <div ref={containerRef} onMouseMove={resetHideTimer} className={`fixed inset-0 z-50 bg-zinc-950 flex overflow-hidden transition-all duration-300 ${!showControls && isPlaying ? 'cursor-none' : ''}`}>
+    <div 
+      ref={containerRef} 
+      onMouseMove={() => resetHideTimer(true)} 
+      className={`fixed inset-0 z-50 bg-zinc-950 flex overflow-hidden transition-all duration-300 ${!showControls && isPlaying ? 'cursor-none' : ''}`}
+    >
       <div className="flex-1 flex flex-col relative h-full bg-black overflow-hidden">
         {/* Header */}
         <div className={`absolute top-0 left-0 right-0 z-40 flex items-center justify-between p-4 bg-gradient-to-b from-black/95 transition-all duration-500 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full'}`}>
@@ -260,9 +358,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             onSeeking={() => { isUserSeeking.current = true; }}
             onSeeked={() => { isUserSeeking.current = false; }}
             onEnded={handleNext} 
-            onClick={togglePlay} 
+            onClick={() => { togglePlay(); resetHideTimer(true); }} 
           />
-          {/* 这里移除了原本 {!isPlaying && ...} 的播放按钮 UI，保持画面简洁 */}
         </div>
 
         {/* Control Bar */}
@@ -271,38 +368,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             type="range" min="0" max="100" step="0.01" 
             value={displayProgress} 
             onMouseDown={() => { isUserSeeking.current = true; }}
-            onMouseUp={() => { isUserSeeking.current = false; }}
+            onMouseUp={() => { isUserSeeking.current = false; resetHideTimer(true); }}
             onChange={handleProgressChange}
             className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all" 
           />
           <div className="flex items-center gap-6 text-zinc-300">
             <div className="flex items-center gap-4">
-              <button onClick={handlePrev} className="hover:text-white transition-colors"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
-              <button onClick={togglePlay} className="hover:text-white transition-colors">
+              <button onClick={() => { handlePrev(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+              <button onClick={() => { togglePlay(); resetHideTimer(true); }} className="hover:text-white transition-colors">
                 {isPlaying ? (
                   <svg className="w-9 h-9" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                 ) : (
                   <svg className="w-9 h-9" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 )}
               </button>
-              <button onClick={handleNext} className="hover:text-white transition-colors"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+              <button onClick={() => { handleNext(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
               
               <div className="flex items-center gap-2 group/volume ml-2">
-                <button onClick={() => setIsMuted(!isMuted)} className="hover:text-white transition-colors">
+                <button onClick={() => { toggleMute(); resetHideTimer(true); }} className="hover:text-white transition-colors">
                   {isMuted || volume === 0 ? (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
                   ) : (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                   )}
                 </button>
-                <input type="range" min="0" max="1" step="0.01" value={isMuted ? 0 : volume} onChange={(e) => { setVolume(parseFloat(e.target.value)); setIsMuted(false); }} className="w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all opacity-0 group-hover/volume:opacity-100" />
+                <input 
+                  type="range" min="0" max="1" step="0.01" 
+                  value={isMuted ? 0 : volume} 
+                  onChange={(e) => { setVolume(parseFloat(e.target.value)); setIsMuted(false); resetHideTimer(true); }} 
+                  className="w-20 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all opacity-0 group-hover/volume:opacity-100 focus:opacity-100" 
+                />
               </div>
             </div>
             
             <div className="flex items-center gap-1 bg-zinc-900/80 border border-zinc-800 p-1 rounded-full shadow-inner">
               <span className="text-[8px] font-black uppercase text-zinc-600 px-2 tracking-widest">{t.displaySize}</span>
               {(['small', 'medium', 'large'] as DisplaySize[]).map((size) => (
-                <button key={size} onClick={() => setDisplaySize(size)} className={`px-3 py-1 text-[9px] font-black uppercase rounded-full transition-all ${displaySize === size ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'text-zinc-500 hover:text-zinc-200'}`}>
+                <button key={size} onClick={() => { setDisplaySize(size); resetHideTimer(true); }} className={`px-3 py-1 text-[9px] font-black uppercase rounded-full transition-all ${displaySize === size ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'text-zinc-500 hover:text-zinc-200'}`}>
                   {t[`size${size.charAt(0).toUpperCase() + size.slice(1)}` as keyof typeof t] as string}
                 </button>
               ))}
@@ -312,7 +414,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             <div className="text-[10px] font-mono text-zinc-500 font-black bg-zinc-900/50 px-2 py-1 rounded border border-zinc-800 tracking-tighter">
               {formatDuration(videoRef.current?.currentTime)} / {formatDuration(video.duration)}
             </div>
-            <button onClick={toggleFullscreen} className="bg-white text-black hover:bg-zinc-200 p-2.5 rounded-full transition-all shadow-xl">
+            <button onClick={() => { toggleFullscreen(); resetHideTimer(true); }} className="bg-white text-black hover:bg-zinc-200 p-2.5 rounded-full transition-all shadow-xl">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
             </button>
           </div>
@@ -321,7 +423,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
 
       {/* Sidebar */}
       <div className={`bg-zinc-950 border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out relative z-50 overflow-visible ${isSidebarOpen ? 'w-full md:w-80' : 'w-0 border-transparent'}`}>
-        <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-[100] bg-zinc-900 border border-zinc-800 p-3 rounded-l-2xl hover:bg-indigo-600 text-zinc-400 hover:text-white transition-all border-r-0 group flex justify-center items-center ${showControls || !isPlaying ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
+        <button onClick={() => { setIsSidebarOpen(!isSidebarOpen); resetHideTimer(true); }} className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-[100] bg-zinc-900 border border-zinc-800 p-3 rounded-l-2xl hover:bg-indigo-600 text-zinc-400 hover:text-white transition-all border-r-0 group flex justify-center items-center ${showControls || !isPlaying ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
           <svg className={`w-5 h-5 transition-transform duration-300 ${isSidebarOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
         </button>
 
@@ -330,7 +432,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">{t.playlist}</h3>
             <div className="flex items-center gap-2">
               <span className="text-[8px] font-black text-zinc-700 uppercase tracking-widest">{t.sort}</span>
-              <select value={playlistSortMode} onChange={(e) => { setPlaylistSortMode(e.target.value as SortMode); localStorage.setItem(PLAYLIST_SORT_STORAGE_KEY, e.target.value); }} className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-400 text-[9px] font-black uppercase tracking-tighter rounded px-2 py-1 outline-none focus:ring-1 focus:ring-indigo-500 hover:text-white transition-colors cursor-pointer">
+              <select value={playlistSortMode} onChange={(e) => { setPlaylistSortMode(e.target.value as SortMode); localStorage.setItem(PLAYLIST_SORT_STORAGE_KEY, e.target.value); resetHideTimer(true); }} className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-400 text-[9px] font-black uppercase tracking-tighter rounded px-2 py-1 outline-none focus:ring-1 focus:ring-indigo-500 hover:text-white transition-colors cursor-pointer">
                 <option value={SortMode.AFTER_CURRENT}>{t.upNext}</option>
                 <option value={SortMode.NEWEST}>{t.newestFirst}</option>
                 <option value={SortMode.SIZE}>{t.fileSize}</option>
