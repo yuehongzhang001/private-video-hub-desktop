@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { VideoItem, SortMode } from '../types';
+import { VideoItem, SortMode, DisplaySize } from '../types';
 import { PREVIEW_DELAY } from '../constants';
 import { thumbnailService } from '../services/ThumbnailService';
 import { translations, Language } from '../translations';
@@ -15,14 +15,17 @@ interface VideoPlayerProps {
 }
 
 const PLAYLIST_SORT_STORAGE_KEY = 'playlist-sort-mode';
+const DISPLAY_SIZE_STORAGE_KEY = 'vhub-display-size';
 
-const PlaylistItem: React.FC<{
+const PlaylistItem = React.memo(({
+  v, isActive, onClick, formatDuration, onMetadataLoaded 
+}: {
   v: VideoItem;
   isActive: boolean;
   onClick: () => void;
   formatDuration: (s?: number) => string;
   onMetadataLoaded: (id: string, thumbnail: string, duration: number) => void;
-}> = ({ v, isActive, onClick, formatDuration, onMetadataLoaded }) => {
+}) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [progressWidth, setProgressWidth] = useState(0);
@@ -40,11 +43,11 @@ const PlaylistItem: React.FC<{
           observer.disconnect();
         }
       },
-      { threshold: 0.1, rootMargin: '50px' }
+      { threshold: 0.1, rootMargin: '100px' }
     );
     if (itemRef.current) observer.observe(itemRef.current);
     return () => observer.disconnect();
-  }, [v.id, v.thumbnail, v.url, onMetadataLoaded]);
+  }, [v.id, v.thumbnail, v.url]);
 
   const handleMouseEnter = () => {
     setIsHovered(true);
@@ -76,6 +79,7 @@ const PlaylistItem: React.FC<{
         {v.thumbnail ? (
           <img 
             src={v.thumbnail} 
+            loading="lazy"
             className={`w-full h-full object-cover transition-opacity duration-300 ${showPreview ? 'opacity-0' : (isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-100')}`} 
             alt="" 
           />
@@ -119,7 +123,7 @@ const PlaylistItem: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang, onClose, onSelectVideo, onMetadataLoaded }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -132,6 +136,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
   const [isFullscreen, setIsFullscreen] = useState(false);
   const t = translations[lang];
   
+  const [displaySize, setDisplaySize] = useState<DisplaySize>(() => {
+    const saved = localStorage.getItem(DISPLAY_SIZE_STORAGE_KEY);
+    return (saved as DisplaySize) || 'large';
+  });
+
   const [playlistSortMode, setPlaylistSortMode] = useState<SortMode>(() => {
     const saved = localStorage.getItem(PLAYLIST_SORT_STORAGE_KEY);
     return (saved as SortMode) || SortMode.AFTER_CURRENT;
@@ -139,9 +148,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
 
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
+  // CRITICAL: Reset progress when video changes to avoid "flash" of previous video's progress
+  useEffect(() => {
+    setProgress(0);
+    setIsPlaying(true);
+  }, [video.id]);
+
   useEffect(() => {
     localStorage.setItem(PLAYLIST_SORT_STORAGE_KEY, playlistSortMode);
   }, [playlistSortMode]);
+
+  useEffect(() => {
+    localStorage.setItem(DISPLAY_SIZE_STORAGE_KEY, displaySize);
+  }, [displaySize]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -187,7 +206,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
   };
 
   const handleTimeUpdate = () => {
-    if (videoRef.current) {
+    if (videoRef.current && videoRef.current.duration) {
       const p = (videoRef.current.currentTime / videoRef.current.duration) * 100;
       setProgress(p);
     }
@@ -242,6 +261,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     }
   };
 
+  // Refined scaling classes for clearer visual difference
+  const videoSizeClass = useMemo(() => {
+    switch (displaySize) {
+      case 'small': return 'max-w-[45%] max-h-[45%]';
+      case 'medium': return 'max-w-[75%] max-h-[75%]';
+      case 'large': 
+      default: return 'w-full h-full';
+    }
+  }, [displaySize]);
+
   return (
     <div ref={containerRef} className="fixed inset-0 z-50 bg-zinc-950 flex flex-col md:flex-row overflow-hidden transition-all duration-300">
       <div className="flex-1 flex flex-col relative h-full bg-black group/main">
@@ -258,8 +287,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
         </div>
 
         {/* Video Surface */}
-        <div className="flex-1 flex items-center justify-center relative">
-          <video ref={videoRef} src={video.url} className="max-h-full max-w-full shadow-2xl cursor-pointer" autoPlay onTimeUpdate={handleTimeUpdate} onEnded={handleNext} onClick={togglePlay} />
+        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/50 overflow-hidden">
+          <video 
+            ref={videoRef} 
+            src={video.url} 
+            className={`shadow-2xl cursor-pointer transition-all duration-500 object-contain ${videoSizeClass}`} 
+            autoPlay 
+            onTimeUpdate={handleTimeUpdate} 
+            onEnded={handleNext} 
+            onClick={togglePlay} 
+          />
           {!isPlaying && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="bg-white/10 p-8 rounded-full backdrop-blur-xl border border-white/20">
@@ -291,6 +328,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             <div className="text-[10px] font-mono text-zinc-500 font-black bg-zinc-900/50 px-2 py-1 rounded border border-zinc-800 tracking-tighter">
               {videoRef.current ? formatDuration(videoRef.current.currentTime) : '0:00'} / {formatDuration(video.duration)}
             </div>
+            
+            {/* Display Size Controls */}
+            <div className="flex items-center gap-1 bg-zinc-900/50 border border-zinc-800 p-1 rounded-full">
+              <span className="text-[8px] font-black uppercase text-zinc-600 px-2 tracking-widest">{t.displaySize}</span>
+              {(['small', 'medium', 'large'] as DisplaySize[]).map((size) => (
+                <button
+                  key={size}
+                  onClick={() => setDisplaySize(size)}
+                  className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-full transition-all ${displaySize === size ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-200'}`}
+                >
+                  {t[`size${size.charAt(0).toUpperCase() + size.slice(1)}` as keyof typeof t]}
+                </button>
+              ))}
+            </div>
+
             <div className="flex items-center gap-3 group/volume">
               <button onClick={() => setIsMuted(!isMuted)} className="hover:text-white transition-colors">
                 {isMuted || volume === 0 ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>}
@@ -345,7 +397,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar min-w-[320px]">
           {sortedPlaylist.map((v) => (
-            <PlaylistItem key={v.id} v={v} isActive={v.id === video.id} onClick={() => onSelectVideo(v)} formatDuration={formatDuration} onMetadataLoaded={onMetadataLoaded} />
+            <PlaylistItem 
+              key={v.id} 
+              v={v} 
+              isActive={v.id === video.id} 
+              onClick={() => onSelectVideo(v)} 
+              formatDuration={formatDuration} 
+              onMetadataLoaded={onMetadataLoaded} 
+            />
           ))}
         </div>
       </div>

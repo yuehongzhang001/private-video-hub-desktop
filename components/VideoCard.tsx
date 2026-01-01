@@ -10,19 +10,29 @@ interface VideoCardProps {
   onMetadataLoaded: (id: string, thumbnail: string, duration: number) => void;
 }
 
-export const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, onMetadataLoaded }) => {
+export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: VideoCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [progressWidth, setProgressWidth] = useState(0);
   const hoverTimer = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!video.thumbnail) {
-      thumbnailService.generate(video.url, video.id, (dataUrl, duration) => {
-        onMetadataLoaded(video.id, dataUrl, duration);
-      });
-    }
+    if (video.thumbnail) return;
+
+    // Use IntersectionObserver to only generate thumbnails for visible cards
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        thumbnailService.generate(video.url, video.id, (dataUrl, duration) => {
+          onMetadataLoaded(video.id, dataUrl, duration);
+        });
+        observer.disconnect();
+      }
+    }, { threshold: 0.1, rootMargin: '200px' });
+
+    if (cardRef.current) observer.observe(cardRef.current);
+    return () => observer.disconnect();
   }, [video.id, video.thumbnail, video.url]);
 
   const handleMouseEnter = () => {
@@ -55,16 +65,14 @@ export const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, onMetadata
     return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Preview start time logic: 10s if duration >= 10s, else 0s
   const previewUrl = useMemo(() => {
-    // If duration is not yet available, we default to 10s fragment (browser handles gracefully)
-    // or use 0 if we know it's a short clip.
     const startTime = (video.duration !== undefined && video.duration < 10) ? 0 : 10;
     return `${video.url}#t=${startTime}`;
   }, [video.url, video.duration]);
 
   return (
     <div 
+      ref={cardRef}
       className="group relative flex flex-col bg-zinc-900 rounded-lg overflow-hidden cursor-pointer transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl hover:shadow-black/50 border border-zinc-800"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -75,6 +83,7 @@ export const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, onMetadata
           <img 
             src={video.thumbnail} 
             alt={video.name}
+            loading="lazy"
             className={`w-full h-full object-cover transition-opacity duration-300 ${showPreview ? 'opacity-0' : 'opacity-100'}`}
           />
         ) : (
@@ -122,4 +131,4 @@ export const VideoCard: React.FC<VideoCardProps> = ({ video, onClick, onMetadata
       </div>
     </div>
   );
-};
+});

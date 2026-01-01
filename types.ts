@@ -18,6 +18,8 @@ export enum SortMode {
   RANDOM = 'random'
 }
 
+export type DisplaySize = 'small' | 'medium' | 'large';
+
 export interface PlayerState {
   isPlaying: boolean;
   currentTime: number;

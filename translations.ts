@@ -30,7 +30,11 @@ export const translations = {
     newestFirst: "最新优先",
     fileSize: "文件大小",
     randomOrder: "随机排序",
-    sortMode: "排序模式"
+    sortMode: "排序模式",
+    sizeSmall: "小",
+    sizeMedium: "中",
+    sizeLarge: "大",
+    displaySize: "显示比例"
   },
   en: {
     searchPlaceholder: "Search local videos...",
@@ -62,7 +66,11 @@ export const translations = {
     newestFirst: "Newest First",
     fileSize: "File Size",
     randomOrder: "Random Order",
-    sortMode: "Sort Mode"
+    sortMode: "Sort Mode",
+    sizeSmall: "Small",
+    sizeMedium: "Medium",
+    sizeLarge: "Large",
+    displaySize: "Display Size"
   }
 };
 

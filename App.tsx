@@ -8,7 +8,7 @@ import { translations, Language } from './translations';
 
 const GRID_COLUMNS_STORAGE_KEY = 'vhub-column-count';
 const LANG_STORAGE_KEY = 'vhub-lang';
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 40; // Increased page size as we use lazy loading now
 
 const App: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
@@ -20,7 +20,6 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem(LANG_STORAGE_KEY);
-    // Force default to 'en' unless a previous selection was saved
     return (saved as Language) || 'en';
   });
   
@@ -85,7 +84,7 @@ const App: React.FC = () => {
 
     setIsProcessing(true);
     const newVideos: VideoItem[] = [];
-    const batchSize = 25;
+    const batchSize = 50;
     const files = (Array.from(fileList) as File[]).filter(file => {
       const ext = file.name.slice((file.name.lastIndexOf(".") - 1 >>> 0) + 2).toLowerCase();
       return SUPPORTED_VIDEO_EXTENSIONS.includes(`.${ext}`);
@@ -117,7 +116,8 @@ const App: React.FC = () => {
   const filteredAndSortedVideos = useMemo(() => {
     let result = [...videos];
     if (searchQuery) {
-      result = result.filter(v => v.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      const q = searchQuery.toLowerCase();
+      result = result.filter(v => v.name.toLowerCase().includes(q));
     }
     switch (sortMode) {
       case SortMode.NEWEST: result.sort((a, b) => b.lastModified - a.lastModified); break;
@@ -134,7 +134,13 @@ const App: React.FC = () => {
   }, [filteredAndSortedVideos, currentPage]);
 
   const updateMetadata = useCallback((id: string, thumbnail: string, duration: number) => {
-    setVideos(prev => prev.map(v => v.id === id ? { ...v, thumbnail, duration } : v));
+    setVideos(prev => {
+      const idx = prev.findIndex(v => v.id === id);
+      if (idx === -1 || (prev[idx].thumbnail === thumbnail && prev[idx].duration === duration)) return prev;
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], thumbnail, duration };
+      return updated;
+    });
   }, []);
 
   const gridDesktopClass = useMemo(() => {
@@ -292,7 +298,8 @@ const App: React.FC = () => {
             <div className={`grid grid-cols-1 sm:grid-cols-2 ${gridDesktopClass} gap-6`}>
               {paginatedVideos.map((video) => (
                 <VideoCard 
-                  key={video.id} video={video} 
+                  key={video.id} 
+                  video={video} 
                   onClick={(v) => setActiveVideoId(v.id)}
                   onMetadataLoaded={updateMetadata}
                 />
@@ -309,8 +316,13 @@ const App: React.FC = () => {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
                 </button>
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum = totalPages <= 5 ? i + 1 : (currentPage <= 3 ? i + 1 : (currentPage >= totalPages - 2 ? totalPages - 4 + i : currentPage - 2 + i));
+                  {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 7) pageNum = i + 1;
+                    else if (currentPage <= 4) pageNum = i + 1;
+                    else if (currentPage >= totalPages - 3) pageNum = totalPages - 6 + i;
+                    else pageNum = currentPage - 3 + i;
+                    
                     return (
                       <button key={pageNum} onClick={() => { setCurrentPage(pageNum); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
                         className={`w-10 h-10 rounded-lg text-xs font-black transition-all ${currentPage === pageNum ? 'bg-indigo-600 text-white shadow-lg' : 'bg-zinc-900 text-zinc-500 hover:text-white'}`}
