@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { VideoItem, SortMode, DisplaySize } from '../types';
 import { PREVIEW_DELAY } from '../constants';
@@ -43,11 +44,11 @@ const PlaylistItem = React.memo(({
           observer.disconnect();
         }
       },
-      { threshold: 0.1, rootMargin: '200px' }
+      { threshold: 0.1, rootMargin: '100px' }
     );
     if (itemRef.current) observer.observe(itemRef.current);
     return () => observer.disconnect();
-  }, [v.id, v.thumbnail, v.url]);
+  }, [v.id, v.thumbnail, v.url, onMetadataLoaded]);
 
   const handleMouseEnter = () => {
     setIsHovered(true);
@@ -111,7 +112,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
   const hideControlsTimer = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   
-  // 核心锁：拦截硬件时间同步
   const isUserSeeking = useRef(false);
   const [displayProgress, setDisplayProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -133,7 +133,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     return (saved as SortMode) || SortMode.AFTER_CURRENT;
   });
 
-  // 极简渲染同步循环
   const updateLoop = useCallback(() => {
     const v = videoRef.current;
     if (v && !isUserSeeking.current && v.duration > 0 && isFinite(v.duration)) {
@@ -158,12 +157,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
   useEffect(() => {
     resetHideTimer();
     return () => { if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current); };
-  }, [resetHideTimer]);
-
-  // 移除了所有手动重置 displayProgress 的逻辑
-  useEffect(() => {
-    resetHideTimer();
-  }, [video.id, resetHideTimer]);
+  }, [resetHideTimer, isPlaying]);
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -268,13 +262,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             onEnded={handleNext} 
             onClick={togglePlay} 
           />
-          {!isPlaying && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-              <div className="bg-white/10 p-8 rounded-full backdrop-blur-xl border border-white/20">
-                <svg className="w-16 h-16 text-white fill-current translate-x-1" viewBox="0 0 20 20"><path d="M8 5v14l11-7z" /></svg>
-              </div>
-            </div>
-          )}
+          {/* 这里移除了原本 {!isPlaying && ...} 的播放按钮 UI，保持画面简洁 */}
         </div>
 
         {/* Control Bar */}

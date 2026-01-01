@@ -8,7 +8,7 @@ class ThumbnailService {
   private activeCount = 0;
   private cache = new Map<string, { dataUrl: string; duration: number }>();
   private pendingKeys = new Set<string>();
-  private readonly MAX_CACHE_SIZE = 1000;
+  private readonly MAX_CACHE_SIZE = 500; // 减小缓存限制，缓解超大库时的内存占用
 
   async generate(url: string, fileKey: string, callback: ThumbnailCallback) {
     if (this.cache.has(fileKey)) {
@@ -26,7 +26,6 @@ class ThumbnailService {
       url,
       fileKey,
       callback: (data, dur) => {
-        // 简单的 LRU：如果缓存满了，清理最旧的一项
         if (this.cache.size >= this.MAX_CACHE_SIZE) {
           const firstKey = this.cache.keys().next().value;
           if (firstKey) this.cache.delete(firstKey);
@@ -56,7 +55,8 @@ class ThumbnailService {
       task.callback('', 0);
     } finally {
       this.activeCount--;
-      setTimeout(() => this.processQueue(), 10); // 微调延迟，给予 UI 更多响应空间
+      // 给主线程喘息机会
+      requestAnimationFrame(() => this.processQueue());
     }
   }
 
@@ -65,28 +65,30 @@ class ThumbnailService {
       const video = document.createElement('video');
       video.style.display = 'none';
       video.muted = true;
+      video.setAttribute('webkit-playsinline', 'true');
+      video.setAttribute('playsinline', 'true');
       video.src = url;
       video.preload = 'metadata';
 
       const timeoutId = setTimeout(() => {
         cleanup();
         reject(new Error("Timeout"));
-      }, 10000);
+      }, 8000);
 
       const cleanup = () => {
         clearTimeout(timeoutId);
         video.onloadedmetadata = null;
-        video.onloadeddata = null;
         video.onseeked = null;
         video.onerror = null;
         video.pause();
-        video.src = "";
+        video.removeAttribute('src'); // 强制释放资源
         video.load();
         video.remove();
       };
 
       video.onloadedmetadata = () => {
-        const seekTime = Math.min(1, video.duration > 0 ? video.duration / 2 : 0);
+        // 取中间帧，但稍微避开开头
+        const seekTime = Math.min(1.5, video.duration > 3 ? 1.5 : 0);
         video.currentTime = seekTime;
       };
 
@@ -94,7 +96,7 @@ class ThumbnailService {
         const canvas = document.createElement('canvas');
         canvas.width = THUMBNAIL_WIDTH;
         canvas.height = THUMBNAIL_HEIGHT;
-        const ctx = canvas.getContext('2d', { alpha: false });
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
         if (!ctx) {
           cleanup();
@@ -129,7 +131,8 @@ class ThumbnailService {
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.5); 
+          // 进一步降低质量以提高超大库时的性能 (0.5 -> 0.4)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.4); 
           const duration = video.duration;
           
           cleanup();

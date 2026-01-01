@@ -28,17 +28,21 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
         });
         observer.disconnect();
       }
-    }, { threshold: 0.1, rootMargin: '400px' });
+    }, { 
+      threshold: 0.01, 
+      rootMargin: '200px' // 减小预加载范围，减少内存突增
+    });
 
     if (cardRef.current) observer.observe(cardRef.current);
     return () => observer.disconnect();
-  }, [video.id, video.thumbnail, video.url]);
+  }, [video.id, video.thumbnail, video.url, onMetadataLoaded]);
 
   const handleMouseEnter = () => {
     setIsHovered(true);
-    setTimeout(() => {
-      if (hoverTimer.current) setProgressWidth(100);
-    }, 10);
+    // 强制触发一次重绘进度条
+    requestAnimationFrame(() => {
+       setProgressWidth(100);
+    });
     
     hoverTimer.current = window.setTimeout(() => {
       setShowPreview(true);
@@ -64,9 +68,11 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
   };
 
   const previewUrl = useMemo(() => {
+    // 只有在需要显示预览时才构建 URL 锚点
+    if (!isHovered) return "";
     const startTime = (video.duration !== undefined && video.duration < 10) ? 0 : 10;
     return `${video.url}#t=${startTime}`;
-  }, [video.url, video.duration]);
+  }, [video.url, video.duration, isHovered]);
 
   return (
     <div 
@@ -108,7 +114,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
           </div>
         )}
 
-        {showPreview && (
+        {showPreview && previewUrl && (
           <video
             ref={videoRef}
             src={previewUrl}
