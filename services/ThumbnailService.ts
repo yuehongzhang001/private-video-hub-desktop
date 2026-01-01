@@ -10,14 +10,12 @@ class ThumbnailService {
   private pendingKeys = new Set<string>();
 
   async generate(url: string, fileKey: string, callback: ThumbnailCallback) {
-    // Check Cache
     if (this.cache.has(fileKey)) {
       const cached = this.cache.get(fileKey)!;
       callback(cached.dataUrl, cached.duration);
       return;
     }
 
-    // Prevent duplicate requests in queue
     if (this.pendingKeys.has(fileKey)) {
       return;
     }
@@ -44,14 +42,16 @@ class ThumbnailService {
     this.activeCount++;
 
     try {
+      // 使用更短的超时逻辑加速处理过程
       const result = await this.createThumbnail(task.url);
       task.callback(result.dataUrl, result.duration);
     } catch (err) {
-      console.warn(`Thumbnail generation failed for ${task.url}:`, err instanceof Error ? err.message : err);
+      console.warn(`Thumbnail failed: ${task.fileKey}`, err instanceof Error ? err.message : err);
       task.callback('', 0);
     } finally {
       this.activeCount--;
-      this.processQueue();
+      // 这里的 setTimeout 给主线程喘息机会，防止连续任务导致 UI 掉帧
+      setTimeout(() => this.processQueue(), 0);
     }
   }
 
@@ -65,8 +65,8 @@ class ThumbnailService {
 
       const timeoutId = setTimeout(() => {
         cleanup();
-        reject(new Error("Thumbnail timeout (15s exceeded)"));
-      }, 15000);
+        reject(new Error("Timeout"));
+      }, 10000); // 缩短为10秒
 
       const cleanup = () => {
         clearTimeout(timeoutId);
@@ -75,8 +75,9 @@ class ThumbnailService {
         video.onseeked = null;
         video.onerror = null;
         video.pause();
-        video.removeAttribute('src');
+        video.src = "";
         video.load();
+        video.remove();
       };
 
       video.onloadedmetadata = () => {
@@ -100,7 +101,7 @@ class ThumbnailService {
           const videoHeight = video.videoHeight;
           if (videoWidth === 0 || videoHeight === 0) {
             cleanup();
-            return reject(new Error("Video dimensions are 0"));
+            return reject(new Error("Dimensions 0"));
           }
 
           const videoRatio = videoWidth / videoHeight;
@@ -123,7 +124,7 @@ class ThumbnailService {
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // 降低质量进一步节省内存
           const duration = video.duration;
           
           cleanup();
@@ -135,9 +136,8 @@ class ThumbnailService {
       };
 
       video.onerror = () => {
-        const err = video.error;
         cleanup();
-        reject(new Error(`Video error: ${err ? err.message : 'Unknown'}`));
+        reject(new Error(`Video error`));
       };
     });
   }

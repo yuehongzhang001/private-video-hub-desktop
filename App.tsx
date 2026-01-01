@@ -8,7 +8,7 @@ import { translations, Language } from './translations';
 
 const GRID_COLUMNS_STORAGE_KEY = 'vhub-column-count';
 const LANG_STORAGE_KEY = 'vhub-lang';
-const PAGE_SIZE = 40; // Increased page size as we use lazy loading now
+const PAGE_SIZE = 24; 
 
 const App: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
@@ -27,7 +27,9 @@ const App: React.FC = () => {
 
   const [columnCount, setColumnCount] = useState<number>(() => {
     const saved = localStorage.getItem(GRID_COLUMNS_STORAGE_KEY);
-    return saved ? parseInt(saved, 10) : 5;
+    const val = saved ? parseInt(saved, 10) : 4;
+    // 过滤掉不再支持的 8 列选项
+    return (val === 4 || val === 6) ? val : 4;
   });
 
   const [fps, setFps] = useState(0);
@@ -145,11 +147,9 @@ const App: React.FC = () => {
 
   const gridDesktopClass = useMemo(() => {
     switch (columnCount) {
-      case 3: return 'md:grid-cols-3';
       case 4: return 'md:grid-cols-4';
-      case 5: return 'md:grid-cols-5';
       case 6: return 'md:grid-cols-6';
-      default: return 'md:grid-cols-5';
+      default: return 'md:grid-cols-4';
     }
   }, [columnCount]);
 
@@ -271,13 +271,16 @@ const App: React.FC = () => {
               </div>
               <div className="flex items-center gap-6">
                 <div className="hidden md:flex items-center gap-2">
-                  <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">{t.columns}</span>
-                  <div className="flex bg-zinc-900 rounded-md p-1 border border-zinc-800">
-                    {[3, 4, 5, 6].map(num => (
-                      <button key={num} onClick={() => setColumnCount(num)}
-                        className={`px-3 py-1 text-[10px] font-black rounded transition-colors ${columnCount === num ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  <span className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">{t.displaySize}</span>
+                  <div className="flex bg-zinc-900 rounded-full p-1 border border-zinc-800 shadow-inner">
+                    {[
+                      { num: 4, label: t.sizeLarge },
+                      { num: 6, label: t.sizeSmall }
+                    ].map(option => (
+                      <button key={option.num} onClick={() => setColumnCount(option.num)}
+                        className={`px-4 py-1 text-[10px] font-black rounded-full transition-all ${columnCount === option.num ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
                       >
-                        {num}
+                        {option.label}
                       </button>
                     ))}
                   </div>
