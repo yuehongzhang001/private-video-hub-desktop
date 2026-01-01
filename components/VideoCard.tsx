@@ -84,14 +84,14 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       onMouseLeave={handleMouseLeave}
       onClick={() => onClick(video)}
     >
-      <div className="aspect-[16/9] relative bg-black overflow-hidden" style={{ aspectRatio: '16 / 9' }}>
+      <div className="relative bg-black overflow-hidden" style={{ aspectRatio: '16 / 9' }}>
         {video.thumbnail ? (
           <img 
             src={video.thumbnail} 
             alt={video.name}
             loading="lazy"
             decoding="async"
-            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${(showPreview && previewReady) ? 'opacity-30' : 'opacity-100'}`}
+            className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${(showPreview && previewReady) ? 'opacity-30' : 'opacity-100'}`}
           />
         ) : (
           <div className="absolute inset-0 w-full h-full flex items-center justify-center">
@@ -120,7 +120,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
             playsInline
             disablePictureInPicture
             onPlaying={() => setPreviewReady(true)}
-            className={`absolute inset-0 w-full h-full object-cover bg-black transition-opacity duration-700 z-10 ${showPreview && previewReady ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity duration-700 z-10 ${showPreview && previewReady ? 'opacity-100' : 'opacity-0'}`}
           />
         )}
 
@@ -128,7 +128,6 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
           {formatDuration(video.duration)}
         </div>
       </div>
-
       <div className="p-4 bg-gradient-to-b from-zinc-900 to-zinc-950">
         <h3 className="text-base font-bold text-zinc-200 truncate group-hover:text-white transition-colors" title={video.name}>
           {video.name}

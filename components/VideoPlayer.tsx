@@ -81,9 +81,9 @@ const PlaylistItem = React.memo(({
       onMouseLeave={handleMouseLeave}
       className={`flex flex-col p-4 cursor-pointer transition-all border-b border-zinc-900/50 group ${isActive ? 'bg-indigo-600/15 border-l-4 border-l-indigo-500' : 'hover:bg-white/5'}`}
     >
-      <div className="aspect-[16/9] bg-black rounded-xl overflow-hidden relative border border-zinc-800 shadow-md" style={{ aspectRatio: '16 / 9' }}>
+      <div className="bg-black rounded-xl overflow-hidden relative border border-zinc-800 shadow-md" style={{ aspectRatio: '16 / 9' }}>
         {v.thumbnail ? (
-          <img src={v.thumbnail} loading="lazy" decoding="async" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${(showPreview && previewReady) ? 'opacity-30' : (isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100')}`} alt="" />
+          <img src={v.thumbnail} loading="lazy" decoding="async" className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${(showPreview && previewReady) ? 'opacity-30' : (isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100')}`} alt="" />
         ) : (
           <div className="absolute inset-0 w-full h-full flex items-center justify-center">
             <div className="w-5 h-5 border-2 border-zinc-800 border-t-zinc-600 rounded-full animate-spin"/>
@@ -104,7 +104,7 @@ const PlaylistItem = React.memo(({
             loop 
             playsInline
             onPlaying={() => setPreviewReady(true)}
-            className={`absolute inset-0 w-full h-full object-cover bg-black transition-opacity duration-700 z-10 ${(showPreview && previewReady) ? 'opacity-100' : 'opacity-0'}`} 
+            className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity duration-700 z-10 ${(showPreview && previewReady) ? 'opacity-100' : 'opacity-0'}`} 
           />
         )}
         
@@ -388,7 +388,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
               <button onClick={() => { handlePrev(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
               <button onClick={() => { togglePlay(); resetHideTimer(true); }} className="hover:text-white transition-colors">
                 {isPlaying ? (
-                  <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                  <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V6h-4z"/></svg>
                 ) : (
                   <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 )}
