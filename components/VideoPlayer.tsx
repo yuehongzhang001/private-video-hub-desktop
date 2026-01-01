@@ -337,7 +337,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
       onMouseMove={() => resetHideTimer(true)} 
       className={`fixed inset-0 z-50 bg-zinc-950 flex overflow-hidden transition-all duration-300 ${!showControls && isPlaying ? 'cursor-none' : ''}`}
     >
-      <div className="flex-1 flex flex-col relative h-full bg-black overflow-hidden aspect-video md:aspect-auto">
+      <div className="flex-1 flex flex-col relative h-full bg-black overflow-hidden">
         {/* Header */}
         <div className={`absolute top-0 left-0 right-0 z-40 flex items-center justify-between p-6 bg-gradient-to-b from-black/95 via-black/50 to-transparent transition-all duration-500 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full'}`}>
           <button onClick={onClose} className="flex items-center gap-3 px-6 py-3 bg-white text-black hover:bg-zinc-200 rounded-full transition-all text-xs font-black uppercase tracking-widest shadow-2xl">
@@ -349,7 +349,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
         </div>
 
         {/* Video Surface */}
-        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/20 overflow-hidden aspect-video md:aspect-auto">
+        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/20 overflow-hidden">
           <video 
             ref={videoRef} src={video.url} style={videoStyle}
             className="w-full h-full object-contain cursor-pointer transition-transform duration-500" 
@@ -440,12 +440,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
       </div>
 
       {/* Sidebar */}
-      <div className={`bg-zinc-950 border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out relative z-50 overflow-visible ${isSidebarOpen ? 'w-full md:w-80' : 'w-0 border-transparent'}`}>
+      <div className={`bg-zinc-950 border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out relative z-50 overflow-visible ${isSidebarOpen ? 'w-full md:w-96' : 'w-0 border-transparent'}`}>
         <button onClick={() => { setIsSidebarOpen(!isSidebarOpen); resetHideTimer(true); }} className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-[100] bg-zinc-900 border border-zinc-800 p-5 rounded-l-3xl hover:bg-indigo-600 text-zinc-400 hover:text-white transition-all border-r-0 group flex justify-center items-center shadow-2xl ${showControls || !isPlaying ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
           <svg className={`w-7 h-7 transition-transform duration-300 ${isSidebarOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
         </button>
 
-        <div className={`flex flex-col h-full w-full min-w-[320px] transition-opacity duration-300 ${!isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <div className={`flex flex-col h-full w-full min-w-[384px] transition-opacity duration-300 ${!isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <div className="p-6 border-b border-zinc-900 flex flex-col gap-4 sticky top-0 bg-zinc-950 z-20">
             <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em]">{t.playlist}</h3>
             <div className="flex items-center gap-3">
