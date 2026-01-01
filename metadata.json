@@ -1,0 +1,5 @@
+{
+  "name": "Private Video Hub",
+  "description": "A high-performance, privacy-focused local video player. Designed for premium playback of local MP4 collections with zero data uploads.",
+  "requestFramePermissions": []
+}
