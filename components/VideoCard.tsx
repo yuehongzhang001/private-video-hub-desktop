@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { VideoItem } from '../types';
 import { PREVIEW_DELAY } from '../constants';
@@ -30,7 +29,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       }
     }, { 
       threshold: 0.01, 
-      rootMargin: '200px' // 减小预加载范围，减少内存突增
+      rootMargin: '400px'
     });
 
     if (cardRef.current) observer.observe(cardRef.current);
@@ -39,14 +38,8 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
 
   const handleMouseEnter = () => {
     setIsHovered(true);
-    // 强制触发一次重绘进度条
-    requestAnimationFrame(() => {
-       setProgressWidth(100);
-    });
-    
-    hoverTimer.current = window.setTimeout(() => {
-      setShowPreview(true);
-    }, PREVIEW_DELAY);
+    requestAnimationFrame(() => setProgressWidth(100));
+    hoverTimer.current = window.setTimeout(() => setShowPreview(true), PREVIEW_DELAY);
   };
 
   const handleMouseLeave = () => {
@@ -68,7 +61,6 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
   };
 
   const previewUrl = useMemo(() => {
-    // 只有在需要显示预览时才构建 URL 锚点
     if (!isHovered) return "";
     const startTime = (video.duration !== undefined && video.duration < 10) ? 0 : 10;
     return `${video.url}#t=${startTime}`;
@@ -79,26 +71,27 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       ref={cardRef}
       style={{ 
         contentVisibility: 'auto',
-        containIntrinsicSize: '0 240px',
+        containIntrinsicSize: '0 280px',
         willChange: isHovered ? 'transform' : 'auto'
       }}
-      className="group relative flex flex-col bg-zinc-900 rounded-lg overflow-hidden cursor-pointer transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl hover:shadow-black/50 border border-zinc-800"
+      className="group relative flex flex-col bg-zinc-900 rounded-xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/60 border border-zinc-800 hover:border-indigo-500/50"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={() => onClick(video)}
     >
-      <div className="aspect-video relative bg-black overflow-hidden">
+      {/* 使用 4:3 比例，对竖版视频更友好 */}
+      <div className="aspect-[4/3] relative bg-black overflow-hidden">
         {video.thumbnail ? (
           <img 
             src={video.thumbnail} 
             alt={video.name}
             loading="lazy"
             decoding="async"
-            className={`w-full h-full object-cover transition-opacity duration-300 ${showPreview ? 'opacity-0' : 'opacity-100'}`}
+            className={`w-full h-full object-contain transition-opacity duration-300 ${showPreview ? 'opacity-0' : 'opacity-100'}`}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-zinc-600 border-t-zinc-200 rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-zinc-700 border-t-zinc-200 rounded-full animate-spin" />
           </div>
         )}
 
@@ -122,22 +115,25 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
             muted
             loop
             disablePictureInPicture
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-contain bg-black"
           />
         )}
 
-        <div className="absolute bottom-2 right-2 bg-black/70 px-1.5 py-0.5 rounded text-[10px] font-medium text-white backdrop-blur-sm z-10">
+        <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-[10px] font-bold text-white backdrop-blur-md z-10 border border-white/10">
           {formatDuration(video.duration)}
         </div>
       </div>
 
-      <div className="p-3">
-        <h3 className="text-sm font-medium text-zinc-200 truncate group-hover:text-white" title={video.name}>
+      <div className="p-3 bg-gradient-to-b from-zinc-900 to-zinc-950">
+        <h3 className="text-sm font-bold text-zinc-200 truncate group-hover:text-white transition-colors" title={video.name}>
           {video.name}
         </h3>
-        <p className="text-[11px] text-zinc-500 mt-1 uppercase">
-          {(video.size / (1024 * 1024)).toFixed(1)} MB
-        </p>
+        <div className="flex items-center justify-between mt-1">
+          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-tighter">
+            {(video.size / (1024 * 1024)).toFixed(1)} MB
+          </p>
+          <div className="text-[9px] text-zinc-600 font-black uppercase">MP4</div>
+        </div>
       </div>
     </div>
   );

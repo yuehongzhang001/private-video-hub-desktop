@@ -1,5 +1,4 @@
-
-import { THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT, MAX_CONCURRENT_THUMBNAILS } from '../constants';
+import { MAX_CONCURRENT_THUMBNAILS } from '../constants';
 
 type ThumbnailCallback = (dataUrl: string, duration: number) => void;
 
@@ -8,7 +7,7 @@ class ThumbnailService {
   private activeCount = 0;
   private cache = new Map<string, { dataUrl: string; duration: number }>();
   private pendingKeys = new Set<string>();
-  private readonly MAX_CACHE_SIZE = 500; // 减小缓存限制，缓解超大库时的内存占用
+  private readonly MAX_CACHE_SIZE = 500;
 
   async generate(url: string, fileKey: string, callback: ThumbnailCallback) {
     if (this.cache.has(fileKey)) {
@@ -55,7 +54,6 @@ class ThumbnailService {
       task.callback('', 0);
     } finally {
       this.activeCount--;
-      // 给主线程喘息机会
       requestAnimationFrame(() => this.processQueue());
     }
   }
@@ -68,71 +66,71 @@ class ThumbnailService {
       video.setAttribute('webkit-playsinline', 'true');
       video.setAttribute('playsinline', 'true');
       video.src = url;
-      video.preload = 'metadata';
+      video.preload = 'auto'; // 使用 auto 确保数据更快加载
 
       const timeoutId = setTimeout(() => {
         cleanup();
         reject(new Error("Timeout"));
-      }, 8000);
+      }, 10000);
 
       const cleanup = () => {
         clearTimeout(timeoutId);
-        video.onloadedmetadata = null;
+        video.onloadeddata = null;
         video.onseeked = null;
         video.onerror = null;
         video.pause();
-        video.removeAttribute('src'); // 强制释放资源
+        video.removeAttribute('src');
         video.load();
         video.remove();
       };
 
-      video.onloadedmetadata = () => {
-        // 取中间帧，但稍微避开开头
-        const seekTime = Math.min(1.5, video.duration > 3 ? 1.5 : 0);
-        video.currentTime = seekTime;
+      video.onloadeddata = () => {
+        // 稍微延迟一下确保 videoWidth/Height 已正确更新（针对部分浏览器处理旋转元数据的 bug）
+        setTimeout(() => {
+          const seekTime = Math.min(1.5, video.duration > 3 ? 1.5 : 0);
+          video.currentTime = seekTime;
+        }, 100);
       };
 
       video.onseeked = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = THUMBNAIL_WIDTH;
-        canvas.height = THUMBNAIL_HEIGHT;
-        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+        const videoWidth = video.videoWidth;
+        const videoHeight = video.videoHeight;
+        
+        if (videoWidth === 0 || videoHeight === 0) {
+          cleanup();
+          return reject(new Error("Dimensions 0"));
+        }
 
+        // 动态计算缩略图尺寸，保留原始比例
+        const MAX_DIM = 400;
+        let targetW = videoWidth;
+        let targetH = videoHeight;
+
+        if (targetW > targetH) {
+          if (targetW > MAX_DIM) {
+            targetH = (targetH * MAX_DIM) / targetW;
+            targetW = MAX_DIM;
+          }
+        } else {
+          if (targetH > MAX_DIM) {
+            targetW = (targetW * MAX_DIM) / targetH;
+            targetH = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(targetW);
+        canvas.height = Math.round(targetH);
+        
+        const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
         if (!ctx) {
           cleanup();
           return reject(new Error("Canvas context failed"));
         }
 
         try {
-          const videoWidth = video.videoWidth;
-          const videoHeight = video.videoHeight;
-          if (videoWidth === 0 || videoHeight === 0) {
-            cleanup();
-            return reject(new Error("Dimensions 0"));
-          }
-
-          const videoRatio = videoWidth / videoHeight;
-          const canvasRatio = canvas.width / canvas.height;
-          let drawWidth, drawHeight, offsetX, offsetY;
-
-          if (videoRatio > canvasRatio) {
-            drawHeight = canvas.height;
-            drawWidth = drawHeight * videoRatio;
-            offsetX = (canvas.width - drawWidth) / 2;
-            offsetY = 0;
-          } else {
-            drawWidth = canvas.width;
-            drawHeight = drawWidth / videoRatio;
-            offsetX = 0;
-            offsetY = (canvas.height - drawHeight) / 2;
-          }
-
-          ctx.fillStyle = '#000';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
-
-          // 进一步降低质量以提高超大库时的性能 (0.5 -> 0.4)
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.4); 
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5); 
           const duration = video.duration;
           
           cleanup();
@@ -145,7 +143,7 @@ class ThumbnailService {
 
       video.onerror = () => {
         cleanup();
-        reject(new Error(`Video error`));
+        reject(new Error(`Video load error`));
       };
     });
   }

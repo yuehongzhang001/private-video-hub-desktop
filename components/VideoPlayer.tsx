@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { VideoItem, SortMode, DisplaySize } from '../types';
 import { PREVIEW_DELAY } from '../constants';
@@ -71,15 +70,15 @@ const PlaylistItem = React.memo(({
   return (
     <div 
       ref={itemRef}
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 80px' }}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 100px' }}
       onClick={onClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`flex flex-col p-2 cursor-pointer transition-all border-b border-zinc-900/30 group ${isActive ? 'bg-indigo-600/10 border-l-4 border-l-indigo-500' : 'hover:bg-white/5'}`}
+      className={`flex flex-col p-2.5 cursor-pointer transition-all border-b border-zinc-900/50 group ${isActive ? 'bg-indigo-600/15 border-l-4 border-l-indigo-500' : 'hover:bg-white/5'}`}
     >
-      <div className="aspect-video bg-black rounded-lg overflow-hidden relative border border-zinc-900 shadow-md">
+      <div className="aspect-[4/3] bg-black rounded-lg overflow-hidden relative border border-zinc-800 shadow-md">
         {v.thumbnail ? (
-          <img src={v.thumbnail} loading="lazy" decoding="async" className={`w-full h-full object-cover transition-opacity duration-300 ${showPreview ? 'opacity-0' : (isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-100')}`} alt="" />
+          <img src={v.thumbnail} loading="lazy" decoding="async" className={`w-full h-full object-contain transition-opacity duration-300 ${showPreview ? 'opacity-0' : (isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100')}`} alt="" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <div className="w-4 h-4 border-2 border-zinc-800 border-t-zinc-600 rounded-full animate-spin"/>
@@ -91,14 +90,14 @@ const PlaylistItem = React.memo(({
           </div>
         )}
         {showPreview && (
-          <video src={previewUrl} autoPlay muted loop className="absolute inset-0 w-full h-full object-cover" />
+          <video src={previewUrl} autoPlay muted loop className="absolute inset-0 w-full h-full object-contain bg-black" />
         )}
-        <div className="absolute bottom-1 right-1 text-[8px] bg-black/80 px-1 rounded text-zinc-300 font-mono font-black tracking-tighter z-10">
+        <div className="absolute bottom-1 right-1 text-[8px] bg-black/90 px-1.5 py-0.5 rounded text-zinc-200 font-black tracking-tighter z-10 border border-white/5">
           {formatDuration(v.duration)}
         </div>
       </div>
-      <div className="mt-2 px-1">
-        <p className={`text-[10px] font-bold truncate tracking-tight ${isActive ? 'text-indigo-400' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
+      <div className="mt-2 px-0.5">
+        <p className={`text-[10px] font-bold truncate tracking-tight ${isActive ? 'text-indigo-400' : 'text-zinc-500 group-hover:text-zinc-200'}`}>
           {v.name}
         </p>
       </div>
@@ -133,7 +132,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     return (saved as SortMode) || SortMode.AFTER_CURRENT;
   });
 
-  // Controls Visibility Logic
   const resetHideTimer = useCallback((forceShow = true) => {
     if (forceShow) {
       setShowControls(true);
@@ -141,7 +139,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     
     if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current);
     
-    // Only set auto-hide timer if video is playing
     if (isPlaying) {
       hideControlsTimer.current = window.setTimeout(() => {
         setShowControls(false);
@@ -162,7 +159,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [updateLoop]);
 
-  // Handle auto-hide when playing state changes
   useEffect(() => {
     resetHideTimer(true);
     return () => { if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current); };
@@ -181,7 +177,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     }
   }, [volume, isMuted]);
 
-  // Media Actions
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) videoRef.current.play().catch(() => {});
@@ -226,7 +221,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     });
   }, []);
 
-  // Keyboard Shortcuts Handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -234,8 +228,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
       const keysToHandle = [' ', 'k', 'f', 'm', 'arrowright', 'arrowleft', 'l', 'j', 'arrowup', 'arrowdown', 'escape'];
       if (!keysToHandle.includes(e.key.toLowerCase())) return;
 
-      // If controls are visible, reset the timer to keep them visible longer
-      // If hidden, resetHideTimer(false) will only clear/set the hide timer without showing the bar
       const performAction = () => {
         switch (e.key.toLowerCase()) {
           case ' ':
@@ -281,9 +273,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             }
             break;
         }
-        
-        // Key requirement: Only reset the timer, don't force show if already hidden
-        // Passing false means: "Don't force setShowControls(true), but refresh the auto-hide logic if active"
         resetHideTimer(false);
       };
 
@@ -320,8 +309,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
 
   const videoStyle = useMemo(() => {
     switch (displaySize) {
-      case 'small': return { transform: 'scale(0.4)', boxShadow: '0 0 100px rgba(0,0,0,0.8)' };
-      case 'medium': return { transform: 'scale(0.7)', boxShadow: '0 0 80px rgba(0,0,0,0.6)' };
+      case 'small': return { transform: 'scale(0.5)', boxShadow: '0 0 100px rgba(0,0,0,0.8)' };
+      case 'medium': return { transform: 'scale(0.75)', boxShadow: '0 0 80px rgba(0,0,0,0.6)' };
       default: return { transform: 'scale(1)', boxShadow: 'none' };
     }
   }, [displaySize]);
@@ -334,7 +323,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     >
       <div className="flex-1 flex flex-col relative h-full bg-black overflow-hidden">
         {/* Header */}
-        <div className={`absolute top-0 left-0 right-0 z-40 flex items-center justify-between p-4 bg-gradient-to-b from-black/95 transition-all duration-500 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full'}`}>
+        <div className={`absolute top-0 left-0 right-0 z-40 flex items-center justify-between p-4 bg-gradient-to-b from-black/95 via-black/50 to-transparent transition-all duration-500 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full'}`}>
           <button onClick={onClose} className="flex items-center gap-2 px-4 py-2 bg-white text-black hover:bg-zinc-200 rounded-full transition-all text-[10px] font-black uppercase tracking-widest shadow-2xl">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             {t.back}
@@ -344,7 +333,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
         </div>
 
         {/* Video Surface */}
-        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/20">
+        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/20 overflow-hidden">
           <video 
             ref={videoRef} src={video.url} style={videoStyle}
             className="w-full h-full object-contain cursor-pointer transition-transform duration-500" 
@@ -363,15 +352,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
         </div>
 
         {/* Control Bar */}
-        <div className={`p-4 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-900 space-y-4 transition-all duration-500 absolute bottom-0 left-0 right-0 z-40 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full'}`}>
-          <input 
-            type="range" min="0" max="100" step="0.01" 
-            value={displayProgress} 
-            onMouseDown={() => { isUserSeeking.current = true; }}
-            onMouseUp={() => { isUserSeeking.current = false; resetHideTimer(true); }}
-            onChange={handleProgressChange}
-            className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all" 
-          />
+        <div className={`p-4 bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-900 space-y-4 transition-all duration-500 absolute bottom-0 left-0 right-0 z-40 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full'}`}>
+          <div className="px-2">
+            <input 
+              type="range" min="0" max="100" step="0.01" 
+              value={displayProgress} 
+              onMouseDown={() => { isUserSeeking.current = true; }}
+              onMouseUp={() => { isUserSeeking.current = false; resetHideTimer(true); }}
+              onChange={handleProgressChange}
+              className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all hover:h-2" 
+            />
+          </div>
           <div className="flex items-center gap-6 text-zinc-300">
             <div className="flex items-center gap-4">
               <button onClick={() => { handlePrev(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
@@ -389,7 +380,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
                   {isMuted || volume === 0 ? (
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
                   ) : (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 5.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                   )}
                 </button>
                 <input 
@@ -411,8 +402,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             </div>
 
             <div className="flex-1" />
-            <div className="text-[10px] font-mono text-zinc-500 font-black bg-zinc-900/50 px-2 py-1 rounded border border-zinc-800 tracking-tighter">
-              {formatDuration(videoRef.current?.currentTime)} / {formatDuration(video.duration)}
+            <div className="text-[10px] font-mono text-zinc-400 font-bold bg-zinc-900 px-3 py-1.5 rounded-full border border-zinc-800 tracking-tighter">
+              {formatDuration(videoRef.current?.currentTime)} <span className="text-zinc-700">/</span> {formatDuration(video.duration)}
             </div>
             <button onClick={() => { toggleFullscreen(); resetHideTimer(true); }} className="bg-white text-black hover:bg-zinc-200 p-2.5 rounded-full transition-all shadow-xl">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
@@ -423,7 +414,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
 
       {/* Sidebar */}
       <div className={`bg-zinc-950 border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out relative z-50 overflow-visible ${isSidebarOpen ? 'w-full md:w-80' : 'w-0 border-transparent'}`}>
-        <button onClick={() => { setIsSidebarOpen(!isSidebarOpen); resetHideTimer(true); }} className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-[100] bg-zinc-900 border border-zinc-800 p-3 rounded-l-2xl hover:bg-indigo-600 text-zinc-400 hover:text-white transition-all border-r-0 group flex justify-center items-center ${showControls || !isPlaying ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
+        <button onClick={() => { setIsSidebarOpen(!isSidebarOpen); resetHideTimer(true); }} className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-[100] bg-zinc-900 border border-zinc-800 p-3 rounded-l-2xl hover:bg-indigo-600 text-zinc-400 hover:text-white transition-all border-r-0 group flex justify-center items-center shadow-2xl ${showControls || !isPlaying ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
           <svg className={`w-5 h-5 transition-transform duration-300 ${isSidebarOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
         </button>
 
@@ -432,7 +423,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">{t.playlist}</h3>
             <div className="flex items-center gap-2">
               <span className="text-[8px] font-black text-zinc-700 uppercase tracking-widest">{t.sort}</span>
-              <select value={playlistSortMode} onChange={(e) => { setPlaylistSortMode(e.target.value as SortMode); localStorage.setItem(PLAYLIST_SORT_STORAGE_KEY, e.target.value); resetHideTimer(true); }} className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-400 text-[9px] font-black uppercase tracking-tighter rounded px-2 py-1 outline-none focus:ring-1 focus:ring-indigo-500 hover:text-white transition-colors cursor-pointer">
+              <select value={playlistSortMode} onChange={(e) => { setPlaylistSortMode(e.target.value as SortMode); localStorage.setItem(PLAYLIST_SORT_STORAGE_KEY, e.target.value); resetHideTimer(true); }} className="flex-1 bg-zinc-900 border border-zinc-800 text-zinc-400 text-[9px] font-black uppercase tracking-tighter rounded px-2 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500 hover:text-white transition-colors cursor-pointer">
                 <option value={SortMode.AFTER_CURRENT}>{t.upNext}</option>
                 <option value={SortMode.NEWEST}>{t.newestFirst}</option>
                 <option value={SortMode.SIZE}>{t.fileSize}</option>
