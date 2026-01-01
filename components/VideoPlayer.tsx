@@ -337,7 +337,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
       onMouseMove={() => resetHideTimer(true)} 
       className={`fixed inset-0 z-50 bg-zinc-950 flex overflow-hidden transition-all duration-300 ${!showControls && isPlaying ? 'cursor-none' : ''}`}
     >
-      <div className="flex-1 flex flex-col relative h-full bg-black overflow-hidden">
+      <div className="flex-1 flex flex-col relative h-full bg-black overflow-hidden aspect-video md:aspect-auto">
         {/* Header */}
         <div className={`absolute top-0 left-0 right-0 z-40 flex items-center justify-between p-6 bg-gradient-to-b from-black/95 via-black/50 to-transparent transition-all duration-500 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full'}`}>
           <button onClick={onClose} className="flex items-center gap-3 px-6 py-3 bg-white text-black hover:bg-zinc-200 rounded-full transition-all text-xs font-black uppercase tracking-widest shadow-2xl">
@@ -349,7 +349,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
         </div>
 
         {/* Video Surface */}
-        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/20 overflow-hidden">
+        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/20 overflow-hidden aspect-video md:aspect-auto">
           <video 
             ref={videoRef} src={video.url} style={videoStyle}
             className="w-full h-full object-contain cursor-pointer transition-transform duration-500" 
@@ -368,7 +368,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
         </div>
 
         {/* Control Bar */}
-        <div className={`p-6 bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-900 space-y-6 transition-all duration-500 absolute bottom-0 left-0 right-0 z-40 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full'}`}>
+        <div className={`p-4 bg-gray-800/15 border-t border-gray-700/20 space-y-4 transition-all duration-500 absolute bottom-0 left-0 right-0 z-40 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full'}`}>
           <div className="px-4">
             <input 
               type="range" min="0" max="100" step="0.01" 
@@ -380,27 +380,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
                 (e.target as HTMLInputElement).blur();
               }}
               onChange={handleProgressChange}
-              className="w-full h-2.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all hover:h-3.5 outline-none focus:outline-none" 
+              className="w-full h-1.5 bg-gray-600/25 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all hover:h-2 outline-none focus:outline-none" 
             />
           </div>
-          <div className="flex items-center gap-8 text-zinc-300">
-            <div className="flex items-center gap-6">
-              <button onClick={() => { handlePrev(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+          <div className="flex items-center gap-6 text-zinc-300">
+            <div className="flex items-center gap-4">
+              <button onClick={() => { handlePrev(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
               <button onClick={() => { togglePlay(); resetHideTimer(true); }} className="hover:text-white transition-colors">
                 {isPlaying ? (
-                  <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V6h-4z"/></svg>
+                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V6h-4z"/></svg>
                 ) : (
-                  <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                  <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 )}
               </button>
-              <button onClick={() => { handleNext(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
+              <button onClick={() => { handleNext(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6V6h-2z"/></svg></button>
               
-              <div className="flex items-center gap-3 group/volume ml-4">
+              <div className="flex items-center gap-2 group/volume ml-4">
                 <button onClick={() => { toggleMute(); resetHideTimer(true); }} className="hover:text-white transition-colors">
                   {isMuted || volume === 0 ? (
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
                   ) : (
-                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 5.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 5.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg>
                   )}
                 </button>
                 <input 
@@ -408,15 +408,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
                   value={isMuted ? 0 : volume} 
                   onChange={(e) => { setVolume(parseFloat(e.target.value)); setIsMuted(false); resetHideTimer(true); }} 
                   onMouseUp={(e) => (e.target as HTMLInputElement).blur()}
-                  className="w-28 h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all opacity-0 group-hover/volume:opacity-100 focus:opacity-100 outline-none focus:outline-none" 
+                  className="w-20 h-1.5 bg-gray-600/25 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all opacity-0 group-hover/volume:opacity-100 focus:opacity-100 outline-none focus:outline-none" 
                 />
               </div>
             </div>
             
-            <div className="flex items-center gap-2 bg-zinc-900/80 border border-zinc-800 p-1.5 rounded-full shadow-inner">
-              <span className="text-[10px] font-black uppercase text-zinc-600 px-3 tracking-widest">{t.displaySize}</span>
+            <div className="flex items-center gap-2 bg-gray-800/15 border border-gray-700/15 p-1 rounded-full shadow-inner">
+              <span className="text-[8px] font-black uppercase text-zinc-600 px-2 tracking-widest">{t.displaySize}</span>
               {(['small', 'medium', 'large'] as DisplaySize[]).map((size) => (
-                <button key={size} onClick={() => { setDisplaySize(size); resetHideTimer(true); }} className={`px-5 py-2 text-xs font-black uppercase rounded-full transition-all ${displaySize === size ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'text-zinc-500 hover:text-zinc-200'}`}>
+                <button key={size} onClick={() => { setDisplaySize(size); resetHideTimer(true); }} className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-full transition-all ${displaySize === size ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'text-zinc-500 hover:text-zinc-200'}`}>
                   {t[`size${size.charAt(0).toUpperCase() + size.slice(1)}` as keyof typeof t] as string}
                 </button>
               ))}
@@ -440,12 +440,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
       </div>
 
       {/* Sidebar */}
-      <div className={`bg-zinc-950 border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out relative z-50 overflow-visible ${isSidebarOpen ? 'w-full md:w-96' : 'w-0 border-transparent'}`}>
+      <div className={`bg-zinc-950 border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out relative z-50 overflow-visible ${isSidebarOpen ? 'w-full md:w-80' : 'w-0 border-transparent'}`}>
         <button onClick={() => { setIsSidebarOpen(!isSidebarOpen); resetHideTimer(true); }} className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-[100] bg-zinc-900 border border-zinc-800 p-5 rounded-l-3xl hover:bg-indigo-600 text-zinc-400 hover:text-white transition-all border-r-0 group flex justify-center items-center shadow-2xl ${showControls || !isPlaying ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
           <svg className={`w-7 h-7 transition-transform duration-300 ${isSidebarOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
         </button>
 
-        <div className={`flex flex-col h-full w-full min-w-[384px] transition-opacity duration-300 ${!isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <div className={`flex flex-col h-full w-full min-w-[320px] transition-opacity duration-300 ${!isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <div className="p-6 border-b border-zinc-900 flex flex-col gap-4 sticky top-0 bg-zinc-950 z-20">
             <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em]">{t.playlist}</h3>
             <div className="flex items-center gap-3">
