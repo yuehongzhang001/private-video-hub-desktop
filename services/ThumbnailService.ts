@@ -8,6 +8,7 @@ class ThumbnailService {
   private activeCount = 0;
   private cache = new Map<string, { dataUrl: string; duration: number }>();
   private pendingKeys = new Set<string>();
+  private readonly MAX_CACHE_SIZE = 1000;
 
   async generate(url: string, fileKey: string, callback: ThumbnailCallback) {
     if (this.cache.has(fileKey)) {
@@ -25,6 +26,12 @@ class ThumbnailService {
       url,
       fileKey,
       callback: (data, dur) => {
+        // 简单的 LRU：如果缓存满了，清理最旧的一项
+        if (this.cache.size >= this.MAX_CACHE_SIZE) {
+          const firstKey = this.cache.keys().next().value;
+          if (firstKey) this.cache.delete(firstKey);
+        }
+        
         this.cache.set(fileKey, { dataUrl: data, duration: dur });
         this.pendingKeys.delete(fileKey);
         callback(data, dur);
@@ -42,7 +49,6 @@ class ThumbnailService {
     this.activeCount++;
 
     try {
-      // 使用更短的超时逻辑加速处理过程
       const result = await this.createThumbnail(task.url);
       task.callback(result.dataUrl, result.duration);
     } catch (err) {
@@ -50,8 +56,7 @@ class ThumbnailService {
       task.callback('', 0);
     } finally {
       this.activeCount--;
-      // 这里的 setTimeout 给主线程喘息机会，防止连续任务导致 UI 掉帧
-      setTimeout(() => this.processQueue(), 0);
+      setTimeout(() => this.processQueue(), 10); // 微调延迟，给予 UI 更多响应空间
     }
   }
 
@@ -66,7 +71,7 @@ class ThumbnailService {
       const timeoutId = setTimeout(() => {
         cleanup();
         reject(new Error("Timeout"));
-      }, 10000); // 缩短为10秒
+      }, 10000);
 
       const cleanup = () => {
         clearTimeout(timeoutId);
@@ -124,7 +129,7 @@ class ThumbnailService {
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
 
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // 降低质量进一步节省内存
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.5); 
           const duration = video.duration;
           
           cleanup();

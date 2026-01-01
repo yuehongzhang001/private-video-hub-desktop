@@ -73,6 +73,10 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
   return (
     <div 
       ref={cardRef}
+      style={{ 
+        contentVisibility: 'auto',
+        containIntrinsicSize: '0 240px'
+      }}
       className="group relative flex flex-col bg-zinc-900 rounded-lg overflow-hidden cursor-pointer transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl hover:shadow-black/50 border border-zinc-800"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -84,6 +88,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
             src={video.thumbnail} 
             alt={video.name}
             loading="lazy"
+            decoding="async"
             className={`w-full h-full object-cover transition-opacity duration-300 ${showPreview ? 'opacity-0' : 'opacity-100'}`}
           />
         ) : (
@@ -92,7 +97,6 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
           </div>
         )}
 
-        {/* Preview Progress Bar (Visible during hover delay) */}
         {isHovered && !showPreview && (
           <div className="absolute top-0 left-0 w-full h-1 bg-zinc-800/50 z-20">
             <div 

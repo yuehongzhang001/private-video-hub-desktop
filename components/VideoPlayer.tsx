@@ -81,6 +81,7 @@ const PlaylistItem = React.memo(({
           <img 
             src={v.thumbnail} 
             loading="lazy"
+            decoding="async"
             className={`w-full h-full object-cover transition-opacity duration-300 ${showPreview ? 'opacity-0' : (isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-100')}`} 
             alt="" 
           />
@@ -152,27 +153,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
 
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
 
-  // 自动隐藏控制条逻辑
   const resetHideTimer = useCallback(() => {
     setShowControls(true);
-    if (hideControlsTimer.current) {
-      window.clearTimeout(hideControlsTimer.current);
-    }
-    
-    // 只有在播放时才自动隐藏
+    if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current);
     if (isPlaying) {
       hideControlsTimer.current = window.setTimeout(() => {
         setShowControls(false);
-        setIsSortMenuOpen(false); // 隐藏时也关闭菜单
+        setIsSortMenuOpen(false);
       }, AUTO_HIDE_TIMEOUT);
     }
   }, [isPlaying]);
 
   useEffect(() => {
     resetHideTimer();
-    return () => {
-      if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current);
-    };
+    return () => { if (hideControlsTimer.current) window.clearTimeout(hideControlsTimer.current); };
   }, [resetHideTimer]);
 
   useEffect(() => {
@@ -190,28 +184,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
   }, [displaySize]);
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
+    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
-
-  useEffect(() => {
-    const handleKeydown = (e: KeyboardEvent) => {
-      resetHideTimer(); // 按键操作也重置计时器
-      if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
-      else if (e.code === 'ArrowRight') { if (videoRef.current) videoRef.current.currentTime += 5; }
-      else if (e.code === 'ArrowLeft') { if (videoRef.current) videoRef.current.currentTime -= 5; }
-      else if (e.code === 'Escape') { 
-        if (!document.fullscreenElement) onClose();
-        else document.exitFullscreen();
-      }
-      else if (e.code === 'KeyF') { toggleFullscreen(); }
-    };
-    window.addEventListener('keydown', handleKeydown);
-    return () => window.removeEventListener('keydown', handleKeydown);
-  }, [onClose, resetHideTimer]);
 
   const togglePlay = () => {
     if (videoRef.current) {
@@ -223,31 +199,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
   };
 
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen().catch(err => {
-        console.warn(`Error attempting to enable full-screen mode: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen().catch(err => {
-        console.warn(`Error attempting to exit full-screen mode: ${err.message}`);
-      });
-    }
-    resetHideTimer();
-  };
-
-  const handleTimeUpdate = () => {
-    if (videoRef.current && videoRef.current.duration) {
-      const p = (videoRef.current.currentTime / videoRef.current.duration) * 100;
-      setProgress(p);
-    }
-  };
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (videoRef.current) {
-      const time = (parseFloat(e.target.value) / 100) * videoRef.current.duration;
-      videoRef.current.currentTime = time;
-      setProgress(parseFloat(e.target.value));
-    }
+    if (!document.fullscreenElement) containerRef.current?.requestFullscreen();
+    else document.exitFullscreen();
     resetHideTimer();
   };
 
@@ -292,12 +245,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     }
   };
 
-  const videoSizeClass = useMemo(() => {
+  // 关键优化：使用 transform 实现极其明显的缩放效果，并辅以阴影增强视觉分离度
+  const videoStyle = useMemo(() => {
     switch (displaySize) {
-      case 'small': return 'max-w-[45%] max-h-[45%]';
-      case 'medium': return 'max-w-[75%] max-h-[75%]';
+      case 'small': 
+        return { 
+          transform: 'scale(0.4)', 
+          boxShadow: '0 0 100px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.1)' 
+        };
+      case 'medium': 
+        return { 
+          transform: 'scale(0.7)', 
+          boxShadow: '0 0 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05)' 
+        };
       case 'large': 
-      default: return 'w-full h-full';
+      default: 
+        return { transform: 'scale(1)', boxShadow: 'none' };
     }
   }, [displaySize]);
 
@@ -308,92 +271,67 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
       onClick={resetHideTimer}
       className={`fixed inset-0 z-50 bg-zinc-950 flex flex-col md:flex-row overflow-hidden transition-all duration-300 ${!showControls && isPlaying ? 'cursor-none' : ''}`}
     >
-      <div className="flex-1 flex flex-col relative h-full bg-black group/main">
+      <div className="flex-1 flex flex-col relative h-full bg-black group/main overflow-hidden">
         {/* Header Overlay */}
         <div className={`absolute top-0 left-0 right-0 z-40 flex items-center justify-between p-4 bg-gradient-to-b from-black/95 via-black/40 to-transparent transition-all duration-500 ease-in-out ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full'}`}>
           <button onClick={onClose} className="flex items-center gap-2 px-4 py-2 bg-white text-black hover:bg-zinc-200 rounded-full transition-all text-[10px] font-black uppercase tracking-widest shadow-2xl">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             {t.back}
           </button>
-          <div className="flex-1 mx-4 text-center pointer-events-none">
-            <h2 className="text-white text-xs font-bold truncate drop-shadow-lg uppercase tracking-widest italic">{video.name}</h2>
-          </div>
+          <h2 className="text-white text-xs font-bold truncate drop-shadow-lg uppercase tracking-widest italic flex-1 mx-8 text-center">{video.name}</h2>
           <div className="w-24" />
         </div>
 
         {/* Video Surface */}
-        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/50 overflow-hidden">
+        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/20 overflow-hidden">
           <video 
             ref={videoRef} 
             src={video.url} 
-            className={`shadow-2xl cursor-pointer transition-all duration-500 object-contain ${videoSizeClass}`} 
+            style={videoStyle}
+            className="w-full h-full object-contain cursor-pointer transition-transform duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]" 
             autoPlay 
-            onTimeUpdate={handleTimeUpdate} 
+            onTimeUpdate={() => setProgress(videoRef.current ? (videoRef.current.currentTime / videoRef.current.duration) * 100 : 0)} 
             onEnded={handleNext} 
             onClick={togglePlay} 
           />
           {!isPlaying && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
               <div className="bg-white/10 p-8 rounded-full backdrop-blur-xl border border-white/20">
                 <svg className="w-16 h-16 text-white fill-current" viewBox="0 0 20 20"><path d="M8 5v14l11-7z" /></svg>
               </div>
             </div>
           )}
-          
-          {/* Drawer Button for Opening Playlist */}
-          {!isSidebarOpen && showControls && (
-            <button 
-              onClick={() => setIsSidebarOpen(true)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 group/drawer h-32 w-4 bg-zinc-900 border-l border-y border-zinc-800 rounded-l-xl flex items-center justify-center transition-all hover:w-6 hover:bg-zinc-800 shadow-2xl z-40"
-            >
-              <svg className="w-3 h-3 text-zinc-500 group-hover/drawer:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M15 19l-7-7 7-7" /></svg>
-            </button>
-          )}
         </div>
 
         {/* Control Bar */}
-        <div className={`p-4 bg-zinc-950 border-t border-zinc-900 space-y-4 transition-all duration-500 ease-in-out absolute bottom-0 left-0 right-0 z-40 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full'}`}>
-          <input type="range" min="0" max="100" step="0.1" value={progress} onChange={handleSeek} className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all" />
+        <div className={`p-4 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-900 space-y-4 transition-all duration-500 ease-in-out absolute bottom-0 left-0 right-0 z-40 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full'}`}>
+          <input type="range" min="0" max="100" step="0.1" value={progress} onChange={(e) => { if(videoRef.current) videoRef.current.currentTime = (parseFloat(e.target.value)/100)*videoRef.current.duration; }} className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400 transition-all" />
           <div className="flex items-center gap-6 text-zinc-300">
             <div className="flex items-center gap-6">
               <button onClick={handlePrev} className="hover:text-white transition-colors"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
               <button onClick={togglePlay} className="hover:text-white transition-colors">{isPlaying ? <svg className="w-9 h-9" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg> : <svg className="w-9 h-9" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}</button>
               <button onClick={handleNext} className="hover:text-white transition-colors"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
             </div>
-            <div className="text-[10px] font-mono text-zinc-500 font-black bg-zinc-900/50 px-2 py-1 rounded border border-zinc-800 tracking-tighter">
-              {videoRef.current ? formatDuration(videoRef.current.currentTime) : '0:00'} / {formatDuration(video.duration)}
-            </div>
             
-            <div className="flex items-center gap-1 bg-zinc-900/50 border border-zinc-800 p-1 rounded-full">
+            <div className="flex items-center gap-1 bg-zinc-900/80 border border-zinc-800 p-1 rounded-full shadow-inner">
               <span className="text-[8px] font-black uppercase text-zinc-600 px-2 tracking-widest">{t.displaySize}</span>
               {(['small', 'medium', 'large'] as DisplaySize[]).map((size) => (
                 <button
                   key={size}
                   onClick={() => setDisplaySize(size)}
-                  className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-full transition-all ${displaySize === size ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-200'}`}
+                  className={`px-3 py-1 text-[9px] font-black uppercase rounded-full transition-all ${displaySize === size ? 'bg-indigo-600 text-white shadow-xl scale-105' : 'text-zinc-500 hover:text-zinc-200'}`}
                 >
                   {t[`size${size.charAt(0).toUpperCase() + size.slice(1)}` as keyof typeof t]}
                 </button>
               ))}
             </div>
 
-            <div className="flex items-center gap-3 group/volume">
-              <button onClick={() => { setIsMuted(!isMuted); resetHideTimer(); }} className="hover:text-white transition-colors">
-                {isMuted || volume === 0 ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" /></svg> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>}
-              </button>
-              <input type="range" min="0" max="1" step="0.01" value={isMuted ? 0 : volume} onChange={(e) => { const val = parseFloat(e.target.value); setVolume(val); if (videoRef.current) videoRef.current.volume = val; setIsMuted(val === 0); resetHideTimer(); }} className="w-16 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-zinc-500 group-hover/volume:accent-white transition-all" />
-            </div>
             <div className="flex-1" />
-            <button 
-              onClick={toggleFullscreen} 
-              className="bg-white text-black hover:bg-zinc-200 p-2.5 rounded-full transition-all shadow-xl"
-              title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-            >
-              {isFullscreen ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-              )}
+            <div className="text-[10px] font-mono text-zinc-500 font-black bg-zinc-900/50 px-2 py-1 rounded border border-zinc-800 tracking-tighter">
+              {videoRef.current ? formatDuration(videoRef.current.currentTime) : '0:00'} / {formatDuration(video.duration)}
+            </div>
+            <button onClick={toggleFullscreen} className="bg-white text-black hover:bg-zinc-200 p-2.5 rounded-full transition-all shadow-xl">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
             </button>
           </div>
         </div>
@@ -401,47 +339,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
 
       {/* Sidebar (Playlist) */}
       <div className={`bg-zinc-950 border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out relative ${isSidebarOpen ? 'w-full md:w-80' : 'w-0 overflow-hidden border-none opacity-0'}`}>
-        {/* Drawer Close Tab */}
-        <button 
-          onClick={() => { setIsSidebarOpen(false); resetHideTimer(); }}
-          className="absolute left-0 top-1/2 -translate-y-1/2 group/drawer-close h-32 w-4 bg-zinc-900 border-l border-y border-zinc-800 rounded-l-xl flex items-center justify-center transition-all hover:w-6 hover:bg-zinc-800 shadow-2xl z-40 -translate-x-full"
-        >
-          <svg className="w-3 h-3 text-zinc-500 group-hover/drawer-close:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M9 5l7 7-7 7" /></svg>
-        </button>
-
         <div className="p-4 border-b border-zinc-900 flex items-center justify-between sticky top-0 bg-zinc-950 z-20 min-w-[320px]">
-          <div className="flex flex-col">
-            <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">{t.playlist}</h3>
-            <span className="text-[9px] text-indigo-500 font-bold uppercase tracking-widest">{getSortLabel(playlistSortMode)}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <button onClick={() => { setIsSortMenuOpen(!isSortMenuOpen); resetHideTimer(); }} className={`px-4 py-2 rounded-full transition-all text-[10px] font-black uppercase tracking-widest ${isSortMenuOpen ? 'bg-indigo-600 text-white shadow-lg' : 'bg-zinc-900 text-zinc-500 hover:text-white border border-zinc-800'}`}>
-                {t.sortMode}
-              </button>
-              {isSortMenuOpen && (
-                <div className="absolute right-0 mt-3 w-48 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl py-2 z-50 overflow-hidden">
-                  {(Object.values(SortMode) as SortMode[]).map(mode => (
-                    <button key={mode} onClick={() => { setPlaylistSortMode(mode); setIsSortMenuOpen(false); resetHideTimer(); }} className={`w-full text-left px-4 py-2 text-[10px] font-bold uppercase tracking-wider hover:bg-zinc-800 transition-colors ${playlistSortMode === mode ? 'text-indigo-400 bg-indigo-500/5' : 'text-zinc-500'}`}>{getSortLabel(mode)}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">{t.playlist}</h3>
+          <button onClick={() => setIsSidebarOpen(false)} className="text-zinc-600 hover:text-white"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg></button>
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar min-w-[320px]">
           {sortedPlaylist.map((v) => (
-            <PlaylistItem 
-              key={v.id} 
-              v={v} 
-              isActive={v.id === video.id} 
-              onClick={() => onSelectVideo(v)} 
-              formatDuration={formatDuration} 
-              onMetadataLoaded={onMetadataLoaded} 
-            />
+            <PlaylistItem key={v.id} v={v} isActive={v.id === video.id} onClick={() => onSelectVideo(v)} formatDuration={formatDuration} onMetadataLoaded={onMetadataLoaded} />
           ))}
         </div>
       </div>
+      {!isSidebarOpen && (
+        <button onClick={() => setIsSidebarOpen(true)} className="fixed right-0 top-1/2 -translate-y-1/2 z-50 bg-zinc-900 border border-zinc-800 p-2 rounded-l-xl hover:bg-zinc-800 text-zinc-500 hover:text-white transition-all shadow-2xl">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
+        </button>
+      )}
     </div>
   );
 };
