@@ -83,7 +83,7 @@ const PlaylistItem = React.memo(({
     >
       <div className="aspect-[4/3] bg-black rounded-lg overflow-hidden relative border border-zinc-800 shadow-md">
         {v.thumbnail ? (
-          <img src={v.thumbnail} loading="lazy" decoding="async" className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-500 ${(showPreview && previewReady) ? 'opacity-30' : (isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100')}`} alt="" />
+          <img src={v.thumbnail} loading="lazy" decoding="async" className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${(showPreview && previewReady) ? 'opacity-30' : (isActive ? 'opacity-100' : 'opacity-70 group-hover:opacity-100')}`} alt="" />
         ) : (
           <div className="absolute inset-0 w-full h-full flex items-center justify-center">
             <div className="w-4 h-4 border-2 border-zinc-800 border-t-zinc-600 rounded-full animate-spin"/>
@@ -104,7 +104,7 @@ const PlaylistItem = React.memo(({
             loop 
             playsInline
             onPlaying={() => setPreviewReady(true)}
-            className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity duration-700 z-10 ${(showPreview && previewReady) ? 'opacity-100' : 'opacity-0'}`} 
+            className={`absolute inset-0 w-full h-full object-cover bg-black transition-opacity duration-700 z-10 ${(showPreview && previewReady) ? 'opacity-100' : 'opacity-0'}`} 
           />
         )}
         

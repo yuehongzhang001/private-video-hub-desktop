@@ -1,3 +1,4 @@
+
 import { MAX_CONCURRENT_THUMBNAILS } from '../constants';
 
 type ThumbnailCallback = (dataUrl: string, duration: number) => void;
@@ -66,7 +67,7 @@ class ThumbnailService {
       video.setAttribute('webkit-playsinline', 'true');
       video.setAttribute('playsinline', 'true');
       video.src = url;
-      video.preload = 'auto'; // 使用 auto 确保数据更快加载
+      video.preload = 'auto';
 
       const timeoutId = setTimeout(() => {
         cleanup();
@@ -85,7 +86,6 @@ class ThumbnailService {
       };
 
       video.onloadeddata = () => {
-        // 稍微延迟一下确保 videoWidth/Height 已正确更新（针对部分浏览器处理旋转元数据的 bug）
         setTimeout(() => {
           const seekTime = Math.min(1.5, video.duration > 3 ? 1.5 : 0);
           video.currentTime = seekTime;
@@ -101,22 +101,10 @@ class ThumbnailService {
           return reject(new Error("Dimensions 0"));
         }
 
-        // 动态计算缩略图尺寸，保留原始比例
-        const MAX_DIM = 400;
-        let targetW = videoWidth;
-        let targetH = videoHeight;
-
-        if (targetW > targetH) {
-          if (targetW > MAX_DIM) {
-            targetH = (targetH * MAX_DIM) / targetW;
-            targetW = MAX_DIM;
-          }
-        } else {
-          if (targetH > MAX_DIM) {
-            targetW = (targetW * MAX_DIM) / targetH;
-            targetH = MAX_DIM;
-          }
-        }
+        // 核心变更：固定高度，计算宽度，实现按高度填充
+        const TARGET_HEIGHT = 360;
+        const targetH = TARGET_HEIGHT;
+        const targetW = (videoWidth * TARGET_HEIGHT) / videoHeight;
 
         const canvas = document.createElement('canvas');
         canvas.width = Math.round(targetW);
@@ -130,7 +118,7 @@ class ThumbnailService {
 
         try {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.5); 
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6); 
           const duration = video.duration;
           
           cleanup();
