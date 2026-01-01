@@ -406,7 +406,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
           </div>
           <div className="flex items-center gap-6 text-zinc-300">
             <div className="flex items-center gap-4">
-              <button onClick={() => { handlePrev(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
+              <button onClick={() => { handlePrev(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
               <button onClick={() => { togglePlay(); resetHideTimer(true); }} className="hover:text-white transition-colors">
                 {isPlaying ? (
                   <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V6h-4z"/></svg>
@@ -414,7 +414,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
                   <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 )}
               </button>
-              <button onClick={() => { handleNext(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6V6h-2z"/></svg></button>
+              <button onClick={() => { handleNext(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><g transform="rotate(180 12 12)"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></g></svg></button>
               
               <div className="flex items-center gap-2 group/volume ml-4">
                 <button onClick={() => { toggleMute(); resetHideTimer(true); }} className="hover:text-white transition-colors">
