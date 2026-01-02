@@ -30,11 +30,6 @@ A desktop application for managing and playing your private video collection, bu
    npm install
    ```
 
-3. Create a `.env.local` file in the root directory and add your Gemini API key:
-   ```
-   GEMINI_API_KEY=your_actual_gemini_api_key_here
-   ```
-
 ### Running in Development
 
 To run the application in development mode:
