@@ -14,6 +14,8 @@
     "electron:start": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron .",
     "electron:build": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron-builder",
     "package": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron-builder",
+    "mpv:build": "node-gyp rebuild --directory native/mpv",
+    "mpv:rebuild": "electron-rebuild -f -w mpvaddon",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
@@ -28,11 +30,20 @@
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "electron-devtools-installer": "^4.0.0",
+    "node-addon-api": "^7.0.0",
+    "node-gyp": "^10.1.0",
+    "@electron/rebuild": "^3.6.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
     "wait-on": "^8.0.1"
   },
   "build": {
+    "extraResources": [
+      {
+        "from": "native/mpv/build/Release/mpvaddon.node",
+        "to": "mpv/mpvaddon.node"
+      }
+    ],
     "win": {
       "extraResources": [
         {

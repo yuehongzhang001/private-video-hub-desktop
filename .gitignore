@@ -26,6 +26,7 @@ dist-ssr
 
 # Electron build outputs
 electron/*.js
+electron/*.cjs
 electron/*.d.ts
 electron/*.d.ts.map
 

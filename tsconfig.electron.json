@@ -14,5 +14,11 @@
     "composite": true
   },
   "include": ["electron/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "electron/**/*.d.ts",
+    "electron/**/*.d.ts.map",
+    "electron/**/*.d.cts",
+    "electron/**/*.d.cts.map"
+  ]
 }

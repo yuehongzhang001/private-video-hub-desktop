@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { spawn } from 'child_process';
+import * as fs from 'fs';
 
 // 仅在开发环境中使用 electron-devtools-installer
 if (process.env.NODE_ENV === 'development') {
@@ -18,6 +19,8 @@ function createWindow() {
   // 获取当前文件的目录路径
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
+  const preloadPath = path.join(__dirname, 'preload.cjs');
+  console.log('[preload] path:', preloadPath, 'exists:', fs.existsSync(preloadPath));
   
   const windowOptions: Electron.BrowserWindowConstructorOptions = {
     width: 1200,
@@ -28,7 +31,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false, // 修复1: 应该设置为 false
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      sandbox: false,
+      preload: preloadPath,
     },
     backgroundColor: '#09090b',
     autoHideMenuBar: true,
@@ -55,6 +59,18 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     if (mainWindow) {
       mainWindow.show();
+    }
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.executeJavaScript('window.electronAPI ? "yes" : "no"')
+      .then(result => console.log('[preload] electronAPI:', result))
+      .catch(err => console.error('[preload] check failed:', err));
+  });
+
+  mainWindow.webContents.on('console-message', (_event, level, message) => {
+    if (message.startsWith('[preload]')) {
+      console.log(message);
     }
   });
 
@@ -194,18 +210,76 @@ app.on('window-all-closed', () => {
 
 // IPC 通信示例
 ipcMain.handle('dialog:openDirectory', async () => {
+  console.log('[dialog] openDirectory');
   if (mainWindow) {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory', 'multiSelections']
     });
     
     if (result.canceled) {
+      console.log('[dialog] canceled');
       return null;
     }
-    
+    console.log('[dialog] selected:', result.filePaths);
     return result.filePaths;
   }
+  console.log('[dialog] no mainWindow');
   return null;
+});
+
+ipcMain.handle('dialog:openDirectoryFiles', async (_event, extensions: string[]) => {
+  console.log('[dialog] openDirectoryFiles');
+  if (!mainWindow) {
+    console.log('[dialog] no mainWindow');
+    return null;
+  }
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'multiSelections']
+  });
+
+  if (result.canceled) {
+    console.log('[dialog] canceled');
+    return null;
+  }
+
+  const allowed = new Set((extensions || []).map((ext) => ext.toLowerCase()));
+  const files: Array<{
+    path: string;
+    url: string;
+    name: string;
+    size: number;
+    lastModified: number;
+  }> = [];
+
+  const walk = async (dir: string) => {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(fullPath);
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (allowed.size === 0 || allowed.has(ext)) {
+          const stat = await fs.promises.stat(fullPath);
+          files.push({
+            path: fullPath,
+            url: pathToFileURL(fullPath).toString(),
+            name: entry.name,
+            size: stat.size,
+            lastModified: stat.mtimeMs
+          });
+        }
+      }
+    }
+  };
+
+  for (const dir of result.filePaths) {
+    await walk(dir);
+  }
+
+  console.log('[dialog] files:', files.length);
+  return files;
 });
 
 ipcMain.handle('mpv:play', async (_event, filePath: string) => {
@@ -228,4 +302,16 @@ ipcMain.handle('mpv:play', async (_event, filePath: string) => {
       resolve({ ok: false, error: err instanceof Error ? err.message : String(err) });
     }
   });
+});
+
+ipcMain.on('preload:ready', (_event, info) => {
+  console.log('[preload] ready:', info);
+});
+
+ipcMain.on('preload:error', (_event, info) => {
+  console.error('[preload] error:', info);
+});
+
+ipcMain.on('preload:begin', (_event, info) => {
+  console.log('[preload] begin:', info);
 });

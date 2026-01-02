@@ -9,7 +9,6 @@ class ThumbnailService {
   private cache = new Map<string, { dataUrl: string; duration: number }>();
   private pendingKeys = new Set<string>();
   private readonly MAX_CACHE_SIZE = 500;
-
   async generate(url: string, fileKey: string, callback: ThumbnailCallback) {
     if (this.cache.has(fileKey)) {
       const cached = this.cache.get(fileKey)!;

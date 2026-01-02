@@ -74,7 +74,9 @@ const App: React.FC = () => {
       setTimeout(() => setIsConfirmingClear(false), 4000);
       return;
     }
-    videos.forEach(v => URL.revokeObjectURL(v.url));
+    videos.forEach(v => {
+      if (v.url.startsWith('blob:')) URL.revokeObjectURL(v.url);
+    });
     thumbnailService.clearCache();
     setVideos([]);
     setActiveVideoId(null);
@@ -111,7 +113,9 @@ const App: React.FC = () => {
     }
 
     setVideos(prev => {
-      prev.forEach(v => URL.revokeObjectURL(v.url));
+      prev.forEach(v => {
+        if (v.url.startsWith('blob:')) URL.revokeObjectURL(v.url);
+      });
       return newVideos;
     });
     setIsProcessing(false);
@@ -124,14 +128,29 @@ const App: React.FC = () => {
     if (window.electronAPI) {
       // 如果在 Electron 环境中，使用 Electron API 选择目录
       try {
-        const folderPaths = await window.electronAPI.openDirectory();
-        if (folderPaths && folderPaths.length > 0) {
-          // 在 Electron 环境下处理目录选择
-          // 这里可以实现目录遍历逻辑
-          console.log('Selected folders:', folderPaths);
-        }
+        const entries = await window.electronAPI.openDirectoryFiles?.(SUPPORTED_VIDEO_EXTENSIONS);
+        if (!entries || entries.length === 0) return;
+        setIsProcessing(true);
+        const newVideos: VideoItem[] = entries.map((entry, idx) => ({
+          id: `${entry.name}-${entry.size}-${entry.lastModified}-${idx}`,
+          path: entry.path,
+          url: entry.url,
+          name: entry.name,
+          size: entry.size,
+          lastModified: entry.lastModified
+        }));
+        setVideos(prev => {
+          prev.forEach(v => {
+            if (v.url.startsWith('blob:')) URL.revokeObjectURL(v.url);
+          });
+          return newVideos;
+        });
+        setActiveVideoId(null);
+        setCurrentPage(1);
+        setIsProcessing(false);
       } catch (error) {
         console.error('Error selecting directory:', error);
+        setIsProcessing(false);
       }
     } else {
       // 如果不在 Electron 环境中，触发文件选择器（保持现有行为）
