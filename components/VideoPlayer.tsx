@@ -121,7 +121,8 @@ const PlaylistItem = React.memo(({
   );
 });
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang, onClose, onSelectVideo, onMetadataLoaded }) => {
+export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
+  const { video, allVideos, lang, onClose, onSelectVideo, onMetadataLoaded } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hideControlsTimer = useRef<number | null>(null);
@@ -219,6 +220,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     if (videoRef.current.paused) videoRef.current.play().catch(() => {});
     else videoRef.current.pause();
   }, []);
+
+  const handleOpenInMpv = useCallback(async () => {
+    if (!window.electronAPI?.playWithMpv) return;
+    const filePath = video.path || (video.file as { path?: string }).path;
+    if (!filePath) {
+      window.alert(t.mpvMissingPath);
+      return;
+    }
+    const result = await window.electronAPI.playWithMpv(filePath);
+    if (!result?.ok) {
+      window.alert(t.mpvNotFound);
+    }
+  }, [video, t]);
 
   const syncMediaState = () => {
     if (videoRef.current) {
@@ -324,7 +338,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     const result = [...allVideos];
     switch (playlistSortMode) {
       case SortMode.AFTER_CURRENT:
-        const idx = allVideos.findIndex(v => v.id === video.id);
+        const idx = allVideos.findIndex((v: { id: any; }) => v.id === video.id);
         return idx !== -1 ? [...allVideos.slice(idx + 1), ...allVideos.slice(0, idx + 1)] : allVideos;
       case SortMode.NEWEST: return result.sort((a, b) => b.lastModified - a.lastModified);
       case SortMode.SIZE: return result.sort((a, b) => b.size - a.size);
@@ -333,8 +347,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
     }
   }, [allVideos, playlistSortMode, video.id]);
 
-  const handleNext = () => onSelectVideo(sortedPlaylist[(sortedPlaylist.findIndex(v => v.id === video.id) + 1) % sortedPlaylist.length]);
-  const handlePrev = () => onSelectVideo(sortedPlaylist[(sortedPlaylist.findIndex(v => v.id === video.id) - 1 + sortedPlaylist.length) % sortedPlaylist.length]);
+  const handleNext = () => onSelectVideo(sortedPlaylist[(sortedPlaylist.findIndex((v: { id: any; }) => v.id === video.id) + 1) % sortedPlaylist.length]);
+  const handlePrev = () => onSelectVideo(sortedPlaylist[(sortedPlaylist.findIndex((v: { id: any; }) => v.id === video.id) - 1 + sortedPlaylist.length) % sortedPlaylist.length]);
 
   const formatDuration = (seconds?: number) => {
     if (seconds === undefined || isNaN(seconds) || !isFinite(seconds)) return '00:00';
@@ -366,7 +380,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             {t.back}
           </button>
           <h2 className="text-white text-base font-bold truncate tracking-widest italic flex-1 mx-12 text-center">{video.name}</h2>
-          <div className="w-32" />
+          <div className="w-32 flex justify-end">
+            {window.electronAPI?.playWithMpv && (
+              <button onClick={handleOpenInMpv} className="px-4 py-2 bg-zinc-900/80 border border-zinc-700 text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-full transition-all text-[10px] font-black uppercase tracking-widest shadow-lg">
+                {t.openInMpv}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Video Surface */}
@@ -480,7 +500,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ video, allVideos, lang
             </div>
           </div>
           <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {sortedPlaylist.map((v) => (
+            {sortedPlaylist.map((v: VideoItem) => (
               <PlaylistItem key={v.id} v={v} isActive={v.id === video.id} onClick={() => onSelectVideo(v)} formatDuration={formatDuration} onMetadataLoaded={onMetadataLoaded} />
             ))}
           </div>

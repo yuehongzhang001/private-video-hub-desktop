@@ -1,13 +1,20 @@
-
 {
   "name": "private-video-hub",
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "./electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:electron": "concurrently \"vite build --watch\" \"wait-on dist/index.html && electron .\"",
+    "electron": "electron .",
+    "electron:dev": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron .",
+    "electron:start": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron .",
+    "electron:build": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron-builder",
+    "package": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron-builder",
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -17,7 +24,32 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-devtools-installer": "^4.0.0",
     "typescript": "^5.7.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "win": {
+      "extraResources": [
+        {
+          "from": "libmpv/win",
+          "to": "libmpv",
+          "filter": ["**/*"]
+        }
+      ]
+    },
+    "mac": {
+      "extraFiles": [
+        {
+          "from": "libmpv/mac",
+          "to": "Frameworks",
+          "filter": ["**/*"]
+        }
+      ]
+    }
   }
 }

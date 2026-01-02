@@ -2,6 +2,7 @@
 export interface VideoItem {
   id: string;
   file: File;
+  path?: string;
   url: string;
   name: string;
   size: number;

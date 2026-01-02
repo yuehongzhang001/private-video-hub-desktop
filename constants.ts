@@ -1,6 +1,17 @@
 
 export const SUPPORTED_VIDEO_EXTENSIONS = [
-  '.mp4'
+  '.mp4',
+  '.m4v',
+  '.mov',
+  '.webm',
+  '.mkv',
+  '.avi',
+  '.mpg',
+  '.mpeg',
+  '.ogv',
+  '.3gp',
+  '.3g2',
+  '.flv'
 ];
 
 export const MAX_CONCURRENT_THUMBNAILS = 3;

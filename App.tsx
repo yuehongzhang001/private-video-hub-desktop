@@ -1,5 +1,5 @@
-
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import * as React from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { VideoItem, SortMode } from './types';
 import { SUPPORTED_VIDEO_EXTENSIONS } from './constants';
 import { VideoCard } from './components/VideoCard';
@@ -96,10 +96,12 @@ const App: React.FC = () => {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      const filePath = (file as { path?: string }).path;
       const url = URL.createObjectURL(file);
       newVideos.push({
         id: `${file.name}-${file.size}-${file.lastModified}-${i}`,
         file,
+        path: typeof filePath === 'string' ? filePath : undefined,
         url,
         name: file.name,
         size: file.size,
@@ -116,6 +118,34 @@ const App: React.FC = () => {
     setCurrentPage(1);
     e.target.value = '';
   }, []);
+
+  // 为 Electron 添加处理文件夹选择的函数
+  const handleFolderSelect = useCallback(async () => {
+    if (window.electronAPI) {
+      // 如果在 Electron 环境中，使用 Electron API 选择目录
+      try {
+        const folderPaths = await window.electronAPI.openDirectory();
+        if (folderPaths && folderPaths.length > 0) {
+          // 在 Electron 环境下处理目录选择
+          // 这里可以实现目录遍历逻辑
+          console.log('Selected folders:', folderPaths);
+        }
+      } catch (error) {
+        console.error('Error selecting directory:', error);
+      }
+    } else {
+      // 如果不在 Electron 环境中，触发文件选择器（保持现有行为）
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.multiple = true;
+      (fileInput as any).webkitdirectory = true;
+      (fileInput as any).directory = '';
+      fileInput.onchange = (e: any) => {
+        handleFiles(e);
+      };
+      fileInput.click();
+    }
+  }, [handleFiles]);
 
   const filteredAndSortedVideos = useMemo(() => {
     let result = [...videos];
@@ -184,7 +214,7 @@ const App: React.FC = () => {
           <h1 className="text-xl font-black tracking-tighter text-white hidden sm:block italic text-nowrap">PRIVATE VIDEO HUB</h1>
         </div>
 
-        <div className="flex-1 max-w-2xl relative group/search">
+        <div className="flex-1 max-w-2xs relative group/search">
           <input 
             type="text" placeholder={t.searchPlaceholder} 
             value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
@@ -217,11 +247,13 @@ const App: React.FC = () => {
             </button>
           )}
           <div className="flex flex-col items-end">
-            <label className="cursor-pointer bg-white hover:bg-zinc-200 text-black px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl shadow-white/5 whitespace-nowrap">
-              <input type="file" multiple {...({ webkitdirectory: "", directory: "" } as any)} onChange={handleFiles} className="hidden" />
+            <button
+              onClick={handleFolderSelect}
+              className="cursor-pointer bg-white hover:bg-zinc-200 text-black px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl shadow-white/5 whitespace-nowrap"
+            >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
               {t.importFolder}
-            </label>
+            </button>
             <span className="text-[9px] text-zinc-600 font-bold uppercase tracking-wider mt-1 mr-1">{t.localPlayback}</span>
           </div>
         </div>
@@ -324,7 +356,7 @@ const App: React.FC = () => {
                 <VideoCard 
                   key={video.id} 
                   video={video} 
-                  onClick={(v) => setActiveVideoId(v.id)}
+                  onClick={(v: { id: React.SetStateAction<string | null>; }) => setActiveVideoId(v.id)}
                   onMetadataLoaded={updateMetadata}
                 />
               ))}
@@ -372,7 +404,7 @@ const App: React.FC = () => {
       <footer className="h-10 bg-black border-t border-zinc-900 px-8 flex items-center justify-between text-xs text-zinc-700 font-bold uppercase tracking-[0.2em]">
         <div className="flex items-center gap-8">
           <span className="flex items-center gap-2 text-emerald-500"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"/> {t.localReady}</span>
-          <span className="flex items-center gap-1.5"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> {t.privacyProtected}</span>
+          <span className="flex items-center gap-1.5"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={4} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2-2v8a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg> {t.privacyProtected}</span>
           <span>FPS: <span className={fps < 30 ? 'text-red-900' : 'text-zinc-500'}>{fps}</span></span>
         </div>
         <div className="hidden sm:block">LOCAL-FIRST MEDIA CORE</div>
@@ -384,7 +416,7 @@ const App: React.FC = () => {
           allVideos={filteredAndSortedVideos}
           lang={lang}
           onClose={() => setActiveVideoId(null)}
-          onSelectVideo={(v) => setActiveVideoId(v.id)}
+          onSelectVideo={(v: { id: React.SetStateAction<string | null>; }) => setActiveVideoId(v.id)}
           onMetadataLoaded={updateMetadata}
         />
       )}
