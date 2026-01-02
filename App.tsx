@@ -35,6 +35,7 @@ const App: React.FC = () => {
   const [fps, setFps] = useState(0);
   const frames = useRef(0);
   const lastTime = useRef(performance.now());
+  const [randomSeed, setRandomSeed] = useState<number>(Date.now());
 
   useEffect(() => {
     localStorage.setItem(GRID_COLUMNS_STORAGE_KEY, columnCount.toString());
@@ -125,10 +126,18 @@ const App: React.FC = () => {
     switch (sortMode) {
       case SortMode.NEWEST: result.sort((a, b) => b.lastModified - a.lastModified); break;
       case SortMode.SIZE: result.sort((a, b) => b.size - a.size); break;
-      case SortMode.RANDOM: result.sort(() => Math.random() - 0.5); break;
+      case SortMode.RANDOM: 
+        result.sort((a, b) => {
+          // Use a seeded random based on video IDs and a stable random seed
+          const seedA = a.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + randomSeed;
+          const seedB = b.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + randomSeed;
+          const pseudoRandom = (seed: number) => (seed * 9301 + 49297) % 233280;
+          return pseudoRandom(seedA) / 233280 - pseudoRandom(seedB) / 233280;
+        });
+        break;
     }
     return result;
-  }, [videos, sortMode, searchQuery]);
+  }, [videos, sortMode, searchQuery, randomSeed]);
 
   const totalPages = Math.ceil(filteredAndSortedVideos.length / PAGE_SIZE);
   const paginatedVideos = useMemo(() => {
@@ -153,6 +162,17 @@ const App: React.FC = () => {
       default: return 'md:grid-cols-4';
     }
   }, [columnCount]);
+
+  const handleSortChange = (newSortMode: SortMode) => {
+    if (newSortMode === SortMode.RANDOM && sortMode !== SortMode.RANDOM) {
+      // Generate a new random seed when switching to random mode
+      setRandomSeed(Date.now());
+    } else if (newSortMode === SortMode.RANDOM && sortMode === SortMode.RANDOM) {
+      // Generate a new random seed when clicking random again while already in random mode
+      setRandomSeed(Date.now());
+    }
+    setSortMode(newSortMode);
+  };
 
   return (
     <div className="h-screen flex flex-col bg-zinc-950 select-none overflow-hidden font-sans">
@@ -223,7 +243,7 @@ const App: React.FC = () => {
                  <svg className="w-16 h-16 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2-2v8a2 2 0 002 2z" /></svg>
               </div>
               <div className="absolute -bottom-3 -right-3 bg-indigo-600 rounded-full p-3 border-4 border-zinc-950">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2-2v8a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
               </div>
             </div>
             
@@ -288,7 +308,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-zinc-600 text-xs font-black uppercase tracking-widest">{t.sort}</span>
-                  <select value={sortMode} onChange={(e) => setSortMode(e.target.value as SortMode)}
+                  <select value={sortMode} onChange={(e) => handleSortChange(e.target.value as SortMode)}
                     className="bg-zinc-900 border border-zinc-800 text-zinc-400 text-xs font-bold uppercase tracking-wider rounded px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500/50 hover:text-white transition-colors cursor-pointer"
                   >
                     <option value={SortMode.NEWEST}>{t.sortByDate}</option>
