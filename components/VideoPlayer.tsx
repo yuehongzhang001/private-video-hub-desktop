@@ -41,7 +41,7 @@ const PlaylistItem = React.memo(({
         if (entries[0].isIntersecting) {
           thumbnailService.generate(v.url, v.id, (dataUrl, duration) => {
             onMetadataLoaded(v.id, dataUrl, duration);
-          });
+          }, v.path);
           observer.disconnect();
         }
       },
@@ -143,11 +143,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const [mpvStatus, setMpvStatus] = useState<'idle' | 'ready' | 'error'>('idle');
   const [mpvError, setMpvError] = useState<string | null>(null);
   const [mpvDebug, setMpvDebug] = useState<string | null>(null);
-  const [showDebug, setShowDebug] = useState(true);
   const [mpvTime, setMpvTime] = useState<number | null>(null);
   const [mpvDuration, setMpvDuration] = useState<number | null>(null);
-  const [mpvVolume, setMpvVolume] = useState<number | null>(null);
-  const [mpvMuted, setMpvMuted] = useState<boolean | null>(null);
   const electronAPI = window.electronAPI;
   const preferMpv = Boolean(electronAPI?.mpvInit);
   
@@ -201,8 +198,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       const timeRes = electronAPI?.mpvGetProperty?.('time-pos', 'double');
       const durRes = electronAPI?.mpvGetProperty?.('duration', 'double');
       const pauseRes = electronAPI?.mpvGetProperty?.('pause', 'bool');
-      const volRes = electronAPI?.mpvGetProperty?.('volume', 'double');
-      const muteRes = electronAPI?.mpvGetProperty?.('mute', 'bool');
       if (timeRes?.ok && typeof timeRes.value === 'number') {
         setMpvTime(timeRes.value);
       }
@@ -214,12 +209,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       }
       if (pauseRes?.ok && typeof pauseRes.value === 'boolean') {
         setIsPlaying(!pauseRes.value);
-      }
-      if (volRes?.ok && typeof volRes.value === 'number') {
-        setMpvVolume(volRes.value);
-      }
-      if (muteRes?.ok && typeof muteRes.value === 'boolean') {
-        setMpvMuted(muteRes.value);
       }
     } else {
       const v = videoRef.current;
@@ -387,7 +376,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     return () => {
       window.electronAPI?.mpvStop?.();
     };
-  }, [video.id, video.path, volume, isMuted, preferMpv]);
+  }, [video.id, video.path, preferMpv]);
 
   useEffect(() => {
     if (!useMpv) return;
@@ -530,8 +519,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
           <h2 className="text-white text-base font-bold truncate tracking-widest italic flex-1 mx-12 text-center">{video.name}</h2>
           <div className="w-32 flex items-center justify-end gap-2">
             <span
-              onClick={() => setShowDebug(prev => !prev)}
-              className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border cursor-pointer ${
+              className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
               useMpv ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-900/80 text-zinc-400 border-zinc-700'
             }`} title={mpvStatus === 'error' && mpvError ? `mpv: ${mpvError}` : undefined}>
               {useMpv ? 'MPV' : 'HTML5'}
@@ -550,20 +538,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
                 className="w-full h-full object-contain cursor-pointer transition-transform duration-500"
                 onClick={() => { togglePlay(); resetHideTimer(true); }}
               />
-              {showDebug && (
-                <div
-                  className="absolute top-20 left-3 z-50 bg-black/70 border border-zinc-700/60 text-zinc-200 text-[10px] font-mono rounded-lg px-3 py-2 max-w-[70%] pointer-events-auto select-text"
-                  style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
-                >
-                  <div>mpvStatus: {mpvStatus}</div>
-                  <div>mpvError: {mpvError || 'none'}</div>
-                  <div>electronAPI: {electronAPI ? 'yes' : 'no'}</div>
-                  <div>mpvInit: {electronAPI?.mpvInit ? 'yes' : 'no'}</div>
-                  <div>mpvVol: {mpvVolume === null ? 'n/a' : mpvVolume.toFixed(1)}</div>
-                  <div>mpvMute: {mpvMuted === null ? 'n/a' : mpvMuted ? 'yes' : 'no'}</div>
-                  <div className="break-all">mpvDebug: {mpvDebug || 'none'}</div>
-                </div>
-              )}
               {mpvStatus === 'error' && (
                 <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/70 text-zinc-200 text-sm font-bold tracking-widest uppercase gap-2 px-6 text-center">
                   <div>MPV ERROR {mpvError ? `(${mpvError})` : ''}</div>
@@ -633,7 +607,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
                 <input 
                   type="range" min="0" max="1" step="0.01" 
                   value={isMuted ? 0 : volume} 
-                  onChange={(e) => { setVolume(parseFloat(e.target.value)); setIsMuted(false); resetHideTimer(true); }} 
+                  onChange={(e) => {
+                    const next = parseFloat(e.target.value);
+                    setVolume(next);
+                    setIsMuted(false);
+                    if (useMpv && mpvStatus === 'ready') {
+                      const mpvVolume = Math.round(next * 100);
+                      window.electronAPI?.mpvCommand?.(['set', 'volume', mpvVolume.toString()]);
+                      window.electronAPI?.mpvCommand?.(['set', 'mute', next === 0 ? 'yes' : 'no']);
+                    }
+                    resetHideTimer(true);
+                  }} 
                   onMouseUp={(e) => (e.target as HTMLInputElement).blur()}
                   className="w-20 h-1.5 bg-gray-600/25 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all opacity-0 group-hover/volume:opacity-100 focus:opacity-100 outline-none focus:outline-none" 
                 />

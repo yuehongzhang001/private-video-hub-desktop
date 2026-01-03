@@ -25,7 +25,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       if (entries[0].isIntersecting) {
         thumbnailService.generate(video.url, video.id, (dataUrl, duration) => {
           onMetadataLoaded(video.id, dataUrl, duration);
-        });
+        }, video.path);
         observer.disconnect();
       }
     }, { 

@@ -29,6 +29,9 @@ electron/*.js
 electron/*.cjs
 electron/*.d.ts
 electron/*.d.ts.map
+electron/*.js.map
+electron/*.cjs.map
 
 # TODO: add this later
 libmpv/*
+native/mpv/build/

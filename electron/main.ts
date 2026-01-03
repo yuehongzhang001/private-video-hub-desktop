@@ -3,6 +3,7 @@ import * as path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
+import { createThumbnail } from './ffmpeg.js';
 
 // 仅在开发环境中使用 electron-devtools-installer
 if (process.env.NODE_ENV === 'development') {
@@ -280,6 +281,10 @@ ipcMain.handle('dialog:openDirectoryFiles', async (_event, extensions: string[])
 
   console.log('[dialog] files:', files.length);
   return files;
+});
+
+ipcMain.handle('ffmpeg:thumbnail', async (_event, options: { inputPath: string; outputPath?: string; width?: number; height?: number; quality?: number }) => {
+  return await createThumbnail(options);
 });
 
 ipcMain.handle('mpv:play', async (_event, filePath: string) => {
