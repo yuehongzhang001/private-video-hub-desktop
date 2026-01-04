@@ -15,8 +15,12 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
   const [showPreview, setShowPreview] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
   const [progressWidth, setProgressWidth] = useState(0);
+  const [previewProgress, setPreviewProgress] = useState(0);
+  const [previewDuration, setPreviewDuration] = useState<number | null>(null);
   const hoverTimer = useRef<number | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const isPreviewScrubbing = useRef(false);
 
   useEffect(() => {
     if (video.thumbnail) return;
@@ -51,6 +55,9 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
     setShowPreview(false);
     setPreviewReady(false);
     setProgressWidth(0);
+    setPreviewProgress(0);
+    setPreviewDuration(null);
+    isPreviewScrubbing.current = false;
     if (hoverTimer.current) {
       clearTimeout(hoverTimer.current);
       hoverTimer.current = null;
@@ -70,6 +77,29 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
     const startTime = (video.duration !== undefined && video.duration < 15) ? 1 : 10;
     return `${video.url}#t=${startTime}`;
   }, [video.url, video.duration, isHovered]);
+
+  const handlePreviewLoadedMetadata = () => {
+    const el = previewVideoRef.current;
+    if (el && isFinite(el.duration)) {
+      setPreviewDuration(el.duration);
+    }
+  };
+
+  const handlePreviewTimeUpdate = () => {
+    if (isPreviewScrubbing.current) return;
+    const el = previewVideoRef.current;
+    if (!el || !isFinite(el.duration) || el.duration <= 0) return;
+    setPreviewProgress((el.currentTime / el.duration) * 100);
+  };
+
+  const handlePreviewSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setPreviewProgress(val);
+    const el = previewVideoRef.current;
+    if (el && isFinite(el.duration) && el.duration > 0) {
+      el.currentTime = (val / 100) * el.duration;
+    }
+  };
 
   return (
     <div 
@@ -113,6 +143,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
 
         {isHovered && previewUrl && (
           <video
+            ref={previewVideoRef}
             src={previewUrl}
             autoPlay
             muted
@@ -120,11 +151,31 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
             playsInline
             disablePictureInPicture
             onPlaying={() => setPreviewReady(true)}
+            onLoadedMetadata={handlePreviewLoadedMetadata}
+            onTimeUpdate={handlePreviewTimeUpdate}
             className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity duration-700 z-10 ${showPreview && previewReady ? 'opacity-100' : 'opacity-0'}`}
           />
         )}
 
-        <div className="absolute bottom-3 right-3 bg-black/80 px-3 py-1 rounded-lg text-xs font-bold text-white backdrop-blur-md z-20 border border-white/10">
+        {isHovered && showPreview && previewReady && previewDuration && (
+          <div className="absolute bottom-0 left-0 right-0 px-2 pb-2 pt-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-20">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="0.1"
+              value={previewProgress}
+              onChange={handlePreviewSeek}
+              onPointerDown={(e) => { e.stopPropagation(); isPreviewScrubbing.current = true; }}
+              onPointerUp={(e) => { e.stopPropagation(); isPreviewScrubbing.current = false; (e.currentTarget as HTMLInputElement).blur(); }}
+              onPointerCancel={(e) => { e.stopPropagation(); isPreviewScrubbing.current = false; }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-indigo-500 bg-zinc-700/60 outline-none focus:outline-none"
+            />
+          </div>
+        )}
+
+        <div className="absolute top-3 right-3 bg-black/80 px-3 py-1 rounded-lg text-xs font-bold text-white backdrop-blur-md z-20 border border-white/10">
           {formatDuration(video.duration)}
         </div>
       </div>

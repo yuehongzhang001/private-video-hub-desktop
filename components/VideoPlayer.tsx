@@ -36,8 +36,12 @@ const PlaylistItem = React.memo(({
   const [showPreview, setShowPreview] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
   const [progressWidth, setProgressWidth] = useState(0);
+  const [previewProgress, setPreviewProgress] = useState(0);
+  const [previewDuration, setPreviewDuration] = useState<number | null>(null);
   const hoverTimer = useRef<number | null>(null);
   const itemRef = useRef<HTMLDivElement>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const isPreviewScrubbing = useRef(false);
 
   useEffect(() => {
     if (v.thumbnail) return;
@@ -68,6 +72,9 @@ const PlaylistItem = React.memo(({
     setShowPreview(false);
     setPreviewReady(false);
     setProgressWidth(0);
+    setPreviewProgress(0);
+    setPreviewDuration(null);
+    isPreviewScrubbing.current = false;
     if (hoverTimer.current) { clearTimeout(hoverTimer.current); hoverTimer.current = null; }
   };
 
@@ -76,6 +83,29 @@ const PlaylistItem = React.memo(({
     const startTime = (v.duration !== undefined && v.duration < 15) ? 1 : 10;
     return `${v.url}#t=${startTime}`;
   }, [v.url, v.duration, isHovered]);
+
+  const handlePreviewLoadedMetadata = () => {
+    const el = previewVideoRef.current;
+    if (el && isFinite(el.duration)) {
+      setPreviewDuration(el.duration);
+    }
+  };
+
+  const handlePreviewTimeUpdate = () => {
+    if (isPreviewScrubbing.current) return;
+    const el = previewVideoRef.current;
+    if (!el || !isFinite(el.duration) || el.duration <= 0) return;
+    setPreviewProgress((el.currentTime / el.duration) * 100);
+  };
+
+  const handlePreviewSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    setPreviewProgress(val);
+    const el = previewVideoRef.current;
+    if (el && isFinite(el.duration) && el.duration > 0) {
+      el.currentTime = (val / 100) * el.duration;
+    }
+  };
 
   return (
     <div 
@@ -103,17 +133,38 @@ const PlaylistItem = React.memo(({
         
         {isHovered && previewUrl && (
           <video 
+            ref={previewVideoRef}
             src={previewUrl} 
             autoPlay 
             muted 
             loop 
             playsInline
             onPlaying={() => setPreviewReady(true)}
+            onLoadedMetadata={handlePreviewLoadedMetadata}
+            onTimeUpdate={handlePreviewTimeUpdate}
             className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity duration-700 z-10 ${(showPreview && previewReady) ? 'opacity-100' : 'opacity-0'}`} 
           />
         )}
+
+        {isHovered && showPreview && previewReady && previewDuration && (
+          <div className="absolute bottom-0 left-0 right-0 px-2 pb-2 pt-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-20">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="0.1"
+              value={previewProgress}
+              onChange={handlePreviewSeek}
+              onPointerDown={(e) => { e.stopPropagation(); isPreviewScrubbing.current = true; }}
+              onPointerUp={(e) => { e.stopPropagation(); isPreviewScrubbing.current = false; (e.currentTarget as HTMLInputElement).blur(); }}
+              onPointerCancel={(e) => { e.stopPropagation(); isPreviewScrubbing.current = false; }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-indigo-500 bg-zinc-700/60 outline-none focus:outline-none"
+            />
+          </div>
+        )}
         
-        <div className="absolute bottom-2 right-2 text-[10px] bg-black/90 px-2 py-0.5 rounded text-zinc-200 font-black tracking-tighter z-20 border border-white/5">
+        <div className="absolute top-2 right-2 text-[10px] bg-black/90 px-2 py-0.5 rounded text-zinc-200 font-black tracking-tighter z-20 border border-white/5">
           {formatDuration(v.duration)}
         </div>
       </div>
