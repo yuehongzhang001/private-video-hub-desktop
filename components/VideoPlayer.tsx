@@ -19,6 +19,9 @@ interface VideoPlayerProps {
 const PLAYLIST_SORT_STORAGE_KEY = 'playlist-sort-mode';
 const DISPLAY_SIZE_STORAGE_KEY = 'vhub-display-size';
 const AUTO_HIDE_TIMEOUT = 3000;
+const MPV_POLL_INTERVAL_MS = 100;
+const MPV_SEEK_DEBOUNCE_MS = 100;
+const MPV_SEEK_HOLD_TIMEOUT_MS = 1000;
 
 const PlaylistItem = React.memo(({
   v, isActive, onClick, formatDuration, onMetadataLoaded 
@@ -130,10 +133,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const mpvCanvasRef = useRef<HTMLCanvasElement>(null);
   const hideControlsTimer = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  const lastMpvPollRef = useRef(0);
+  const mpvSeekTimerRef = useRef<number | null>(null);
+  const pendingMpvSeekRef = useRef<number | null>(null);
+  const mpvSeekHoldRef = useRef<number | null>(null);
+  const mpvSeekReleaseTimerRef = useRef<number | null>(null);
   
   const isUserSeeking = useRef(false);
   const [displayProgress, setDisplayProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isEnded, setIsEnded] = useState(false);
   
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
@@ -208,6 +217,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   useEffect(() => {
     return () => {
       if (sidebarHideTimer.current) window.clearTimeout(sidebarHideTimer.current);
+      if (mpvSeekTimerRef.current) window.clearTimeout(mpvSeekTimerRef.current);
+      if (mpvSeekReleaseTimerRef.current) window.clearTimeout(mpvSeekReleaseTimerRef.current);
     };
   }, []);
 
@@ -220,6 +231,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   }, [video.id]);
 
   useEffect(() => {
+    if (mpvSeekTimerRef.current) {
+      window.clearTimeout(mpvSeekTimerRef.current);
+      mpvSeekTimerRef.current = null;
+    }
+    if (mpvSeekReleaseTimerRef.current) {
+      window.clearTimeout(mpvSeekReleaseTimerRef.current);
+      mpvSeekReleaseTimerRef.current = null;
+    }
+    pendingMpvSeekRef.current = null;
+    mpvSeekHoldRef.current = null;
+    isUserSeeking.current = false;
+  }, [video.id]);
+
+  useEffect(() => {
+    setIsEnded(false);
     if (isDeleted) return;
     setIsPlaying(true);
     if (useMpv && mpvStatus === 'ready') {
@@ -250,20 +276,33 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
 
   const updateLoop = useCallback(() => {
     if (useMpv && mpvStatus === 'ready') {
-      const timeRes = electronAPI?.mpvGetProperty?.('time-pos', 'double');
-      const durRes = electronAPI?.mpvGetProperty?.('duration', 'double');
-      const pauseRes = electronAPI?.mpvGetProperty?.('pause', 'bool');
+      const now = performance.now();
+      if (now - lastMpvPollRef.current >= MPV_POLL_INTERVAL_MS) {
+        lastMpvPollRef.current = now;
+        const timeRes = electronAPI?.mpvGetProperty?.('time-pos', 'double');
+        const durRes = electronAPI?.mpvGetProperty?.('duration', 'double');
+        const pauseRes = electronAPI?.mpvGetProperty?.('pause', 'bool');
       if (timeRes?.ok && typeof timeRes.value === 'number') {
         setMpvTime(timeRes.value);
-      }
-      if (durRes?.ok && typeof durRes.value === 'number') {
-        setMpvDuration(durRes.value);
-        if (!isUserSeeking.current && durRes.value > 0 && timeRes?.ok && typeof timeRes.value === 'number') {
-          setDisplayProgress((timeRes.value / durRes.value) * 100);
+          if (mpvSeekHoldRef.current !== null && Math.abs(timeRes.value - mpvSeekHoldRef.current) <= 0.3) {
+            mpvSeekHoldRef.current = null;
+            isUserSeeking.current = false;
+          }
         }
-      }
-      if (pauseRes?.ok && typeof pauseRes.value === 'boolean') {
-        setIsPlaying(!pauseRes.value);
+        if (durRes?.ok && typeof durRes.value === 'number') {
+          setMpvDuration(durRes.value);
+          if (!isUserSeeking.current && mpvSeekHoldRef.current === null && durRes.value > 0 && timeRes?.ok && typeof timeRes.value === 'number') {
+            setDisplayProgress((timeRes.value / durRes.value) * 100);
+          }
+          if (durRes.value > 0 && timeRes?.ok && typeof timeRes.value === 'number') {
+            const ended = timeRes.value >= durRes.value - 0.2;
+            setIsEnded(ended);
+            if (ended) setIsPlaying(false);
+          }
+        }
+        if (pauseRes?.ok && typeof pauseRes.value === 'boolean') {
+          setIsPlaying(!pauseRes.value);
+        }
       }
     } else {
       const v = videoRef.current;
@@ -300,14 +339,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const togglePlay = useCallback(() => {
     if (useMpv) {
       if (mpvStatus !== 'ready') return;
+      if (isEnded) {
+        window.electronAPI?.mpvCommand?.(['seek', '0', 'absolute', 'keyframes']);
+        window.electronAPI?.mpvCommand?.(['set', 'pause', 'no']);
+        setIsEnded(false);
+        setIsPlaying(true);
+        return;
+      }
       window.electronAPI?.mpvCommand?.(['cycle', 'pause']);
       setIsPlaying(prev => !prev);
       return;
     }
     if (!videoRef.current) return;
+    if (isEnded) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(() => {});
+      setIsEnded(false);
+      return;
+    }
     if (videoRef.current.paused) videoRef.current.play().catch(() => {});
     else videoRef.current.pause();
-  }, [useMpv, mpvStatus]);
+  }, [useMpv, mpvStatus, isEnded]);
 
   const syncMediaState = () => {
     if (videoRef.current) {
@@ -322,12 +374,48 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     if (useMpv) {
       if (mpvDuration && mpvDuration > 0) {
         const target = (val / 100) * mpvDuration;
-        electronAPI?.mpvCommand?.(['set', 'time-pos', target.toString()]);
+        if (isEnded) {
+          setIsEnded(false);
+          setIsPlaying(true);
+          electronAPI?.mpvCommand?.(['set', 'pause', 'no']);
+        }
+        isUserSeeking.current = true;
+        pendingMpvSeekRef.current = target;
+        if (mpvSeekTimerRef.current) {
+          window.clearTimeout(mpvSeekTimerRef.current);
+        }
+        mpvSeekTimerRef.current = window.setTimeout(() => {
+          const pendingTarget = pendingMpvSeekRef.current;
+          if (pendingTarget !== null) {
+            electronAPI?.mpvCommand?.([
+              'seek',
+              pendingTarget.toString(),
+              'absolute',
+              'keyframes'
+            ]);
+            mpvSeekHoldRef.current = pendingTarget;
+            pendingMpvSeekRef.current = null;
+            if (mpvSeekReleaseTimerRef.current) {
+              window.clearTimeout(mpvSeekReleaseTimerRef.current);
+            }
+            mpvSeekReleaseTimerRef.current = window.setTimeout(() => {
+              if (mpvSeekHoldRef.current === pendingTarget) {
+                mpvSeekHoldRef.current = null;
+                isUserSeeking.current = false;
+              }
+            }, MPV_SEEK_HOLD_TIMEOUT_MS);
+          }
+          mpvSeekTimerRef.current = null;
+        }, MPV_SEEK_DEBOUNCE_MS);
       }
       return;
     }
     if (videoRef.current && isFinite(videoRef.current.duration)) {
       videoRef.current.currentTime = (val / 100) * videoRef.current.duration;
+      if (isEnded) {
+        setIsEnded(false);
+        videoRef.current.play().catch(() => {});
+      }
     }
   };
 
@@ -702,6 +790,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
               ref={videoRef} src={video.url} style={videoStyle}
               className="w-full h-full object-contain cursor-pointer transition-transform duration-500" 
               autoPlay 
+              onEnded={() => { setIsEnded(true); setIsPlaying(false); handleNext(); }}
               onPlay={syncMediaState} 
               onPause={syncMediaState}
               onPlaying={syncMediaState}
@@ -710,7 +799,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
               onLoadedData={syncMediaState}
               onSeeking={() => { isUserSeeking.current = true; }}
               onSeeked={() => { isUserSeeking.current = false; }}
-              onEnded={handleNext} 
               onClick={() => { togglePlay(); resetHideTimer(true); }} 
             />
           )}
@@ -724,7 +812,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
                 value={displayProgress} 
                 onMouseDown={() => { isUserSeeking.current = true; }}
                 onMouseUp={(e) => { 
-                  isUserSeeking.current = false; 
+                  if (!useMpv || (pendingMpvSeekRef.current === null && mpvSeekHoldRef.current === null)) {
+                    isUserSeeking.current = false; 
+                  }
                   resetHideTimer(true); 
                   (e.target as HTMLInputElement).blur();
                 }}
@@ -736,7 +826,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
               <div className="flex items-center gap-4">
                 <button onClick={() => { handlePrev(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
                 <button onClick={() => { togglePlay(); resetHideTimer(true); }} className="hover:text-white transition-colors">
-                  {isPlaying ? (
+                  {isEnded ? (
+                    <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z" />
+                    </svg>
+                  ) : isPlaying ? (
                     <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V6h-4z"/></svg>
                   ) : (
                     <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>

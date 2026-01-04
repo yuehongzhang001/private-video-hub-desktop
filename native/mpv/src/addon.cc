@@ -150,6 +150,7 @@ Napi::Value CreatePlayer(const Napi::CallbackInfo& info) {
   g_api.mpv_set_option_string(g_handle, "terminal", "no");
   g_api.mpv_set_option_string(g_handle, "msg-level", "all=error");
   g_api.mpv_set_option_string(g_handle, "vo", "libmpv");
+  g_api.mpv_set_option_string(g_handle, "keep-open", "yes");
   g_api.mpv_set_option_string(g_handle, "audio", "yes");
   g_api.mpv_set_option_string(g_handle, "audio-device", "auto");
   g_api.mpv_set_option_string(g_handle, "audio-exclusive", "no");
