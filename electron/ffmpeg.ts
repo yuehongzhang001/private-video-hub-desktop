@@ -23,10 +23,17 @@ export type ThumbnailResult = {
 
 const nodeRequire = createRequire(import.meta.url);
 
+let ffmpegPathLogged = false;
+
 const resolveFfmpegPath = () => {
   if (process.env.FFMPEG_PATH) return process.env.FFMPEG_PATH;
   try {
-    return nodeRequire('ffmpeg-static') as string;
+    const resolved = nodeRequire('ffmpeg-static') as string;
+    if (resolved.includes('app.asar')) {
+      const unpacked = resolved.replace('app.asar', 'app.asar.unpacked');
+      if (fs.existsSync(unpacked)) return unpacked;
+    }
+    return resolved;
   } catch {
     return null;
   }
@@ -51,6 +58,10 @@ export const createThumbnail = async (options: ThumbnailOptions): Promise<Thumbn
   }
 
   const ffmpegPath = resolveFfmpegPath();
+  if (!ffmpegPathLogged) {
+    ffmpegPathLogged = true;
+    console.log('[ffmpeg] path:', ffmpegPath);
+  }
   if (!ffmpegPath) {
     return { ok: false, error: 'ffmpeg_missing' };
   }
@@ -92,6 +103,12 @@ export const createThumbnail = async (options: ThumbnailOptions): Promise<Thumbn
       child.on('close', async (code) => {
         const duration = parseDuration(stderr);
         if (code !== 0) {
+          console.error('[ffmpeg] failed', {
+            code,
+            inputPath,
+            outputPath: finalOutputPath,
+            stderr: stderr.trim() || null
+          });
           resolve({ ok: false, error: stderr.trim() || `ffmpeg_exit_${code}` });
           return;
         }

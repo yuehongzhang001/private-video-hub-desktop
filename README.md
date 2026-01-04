@@ -60,6 +60,19 @@ npm run package
 
 This will create distributable files in the `release` directory for your current platform.
 
+## Logging (Release)
+
+Logs are written to:
+- Main process: `C:\Users\<you>\AppData\Roaming\Private Video Hub\logs\main.log`
+- Renderer process: `C:\Users\<you>\AppData\Roaming\Private Video Hub\logs\renderer.log`
+
+To mirror renderer logs to the command line (PowerShell):
+
+```powershell
+$env:RENDERER_LOG_TO_CONSOLE="1"
+.\'Private Video Hub.exe'
+```
+
 ## Architecture
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS

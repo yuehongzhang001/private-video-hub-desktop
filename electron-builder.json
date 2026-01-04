@@ -14,15 +14,31 @@
     "constants.ts",
     "types.ts"
   ],
+  "asarUnpack": [
+    "**/node_modules/ffmpeg-static/**"
+  ],
   "extraResources": [
     {
       "from": "public/icon.png",
       "to": "icon.png"
+    },
+    {
+      "from": "native/mpv/build/Release/mpvaddon.node",
+      "to": "mpv/mpvaddon.node"
     }
   ],
   "win": {
     "target": "nsis",
-    "icon": "build/icon.ico"
+    "icon": "build/icon.ico",
+    "extraResources": [
+      {
+        "from": "libmpv/win",
+        "to": "libmpv",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   },
   "mac": {
     "target": "dmg",

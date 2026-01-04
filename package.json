@@ -12,8 +12,8 @@
     "electron": "electron .",
     "electron:dev": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron .",
     "electron:start": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron .",
-    "electron:build": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron-builder",
-    "package": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron-builder",
+    "electron:build": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron-builder -c electron-builder.json",
+    "package": "npm run build && tsc -p tsconfig.electron.json --outDir electron && electron-builder -c electron-builder.json",
     "mpv:build": "node-gyp rebuild --directory native/mpv",
     "mpv:rebuild": "electron-rebuild -f -w mpvaddon",
     "postinstall": "electron-builder install-app-deps"

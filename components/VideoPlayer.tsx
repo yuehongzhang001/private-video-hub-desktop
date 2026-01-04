@@ -148,6 +148,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const [mpvDuration, setMpvDuration] = useState<number | null>(null);
   const electronAPI = window.electronAPI;
   const preferMpv = Boolean(electronAPI?.mpvInit);
+  const [playerMode, setPlayerMode] = useState<'mpv' | 'html'>(() => (preferMpv ? 'mpv' : 'html'));
   const sidebarHideTimer = useRef<number | null>(null);
 
   const setSidebarOpen = useCallback((open: boolean) => {
@@ -342,6 +343,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
 
   useEffect(() => {
     if (!preferMpv) {
+      setPlayerMode('html');
+      return;
+    }
+  }, [preferMpv]);
+
+  useEffect(() => {
+    if (playerMode === 'html') {
+      setUseMpv(false);
+      setMpvStatus('idle');
+      setMpvError(null);
+      setMpvDebug(null);
+      return;
+    }
+    if (!preferMpv) {
       setUseMpv(true);
       setMpvStatus('error');
       setMpvError('addon_missing');
@@ -401,7 +416,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     return () => {
       window.electronAPI?.mpvStop?.();
     };
-  }, [video.id, video.path, preferMpv]);
+  }, [video.id, video.path, preferMpv, playerMode]);
+
+  useEffect(() => {
+    if (playerMode === 'html') {
+      window.electronAPI?.mpvStop?.();
+    }
+  }, [playerMode]);
 
   useEffect(() => {
     if (!useMpv) return;
@@ -543,13 +564,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
           </button>
           <h2 className="text-white text-base font-bold truncate tracking-widest italic flex-1 mx-12 text-center">{video.name}</h2>
           <div className="w-32 flex items-center justify-end gap-2">
-            <span
-              className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-              useMpv ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-zinc-900/80 text-zinc-400 border-zinc-700'
-            }`} title={mpvStatus === 'error' && mpvError ? `mpv: ${mpvError}` : undefined}>
+            <button
+              type="button"
+              onClick={() => {
+                if (!preferMpv) return;
+                setPlayerMode((prev) => (prev === 'mpv' ? 'html' : 'mpv'));
+                resetHideTimer(true);
+              }}
+              className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${
+              useMpv ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30' : 'bg-zinc-900/80 text-zinc-400 border-zinc-700 hover:bg-zinc-800/80'
+            } ${!preferMpv ? 'opacity-40 cursor-not-allowed' : ''}`}
+              title={!preferMpv ? 'mpv addon missing' : (mpvStatus === 'error' && mpvError ? `mpv: ${mpvError}` : 'toggle player')}
+            >
               {useMpv ? 'MPV' : 'HTML5'}
-            </span>
-            
+            </button>
           </div>
         </div>
 
