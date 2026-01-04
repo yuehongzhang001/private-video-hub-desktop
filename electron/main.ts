@@ -356,6 +356,21 @@ ipcMain.handle('dialog:openDirectoryFiles', async (_event, extensions: string[])
   return files;
 });
 
+ipcMain.handle('file:trash', async (_event, filePath: string) => {
+  if (typeof filePath !== 'string' || !filePath.trim()) {
+    return { ok: false, error: 'missing_path' };
+  }
+
+  const resolvedPath = filePath.startsWith('file://') ? fileURLToPath(filePath) : filePath;
+  try {
+    await fs.promises.stat(resolvedPath);
+    await shell.trashItem(resolvedPath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
 ipcMain.handle('ffmpeg:thumbnail', async (_event, options: { inputPath: string; outputPath?: string; width?: number; height?: number; quality?: number }) => {
   return await createThumbnail(options);
 });

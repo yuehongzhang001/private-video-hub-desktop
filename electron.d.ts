@@ -13,6 +13,7 @@ declare global {
         lastModified: number;
       }> | null>;
       createThumbnail?: (inputPath: string, options?: { outputPath?: string; width?: number; height?: number; quality?: number }) => Promise<{ ok: boolean; error?: string; outputPath?: string; dataUrl?: string; duration?: number }>;
+      trashItem?: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
       playWithMpv?: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
       mpvInit?: () => { ok: boolean; error?: string };
       mpvLoad?: (filePath: string) => { ok: boolean; error?: string };

@@ -19,6 +19,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deletedNotice, setDeletedNotice] = useState<VideoItem | null>(null);
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem(LANG_STORAGE_KEY);
     return (saved as Language) || 'en';
@@ -188,6 +189,26 @@ const App: React.FC = () => {
     return result;
   }, [videos, sortMode, searchQuery, randomSeed]);
 
+  const handleDeleteVideo = useCallback(async (video: VideoItem) => {
+    if (!video.path || !window.electronAPI?.trashItem) {
+      return { ok: false, error: 'not_available' };
+    }
+
+    const result = await window.electronAPI.trashItem(video.path);
+    if (!result?.ok) return result;
+
+    setVideos(prev => {
+      const target = prev.find(v => v.id === video.id);
+      if (target?.url.startsWith('blob:')) URL.revokeObjectURL(target.url);
+      return prev.filter(v => v.id !== video.id);
+    });
+
+    setActiveVideoId(prev => (prev === video.id ? null : prev));
+    setDeletedNotice(video);
+
+    return result;
+  }, []);
+
   const totalPages = Math.ceil(filteredAndSortedVideos.length / PAGE_SIZE);
   const paginatedVideos = useMemo(() => {
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -202,6 +223,11 @@ const App: React.FC = () => {
       updated[idx] = { ...updated[idx], thumbnail, duration };
       return updated;
     });
+  }, []);
+
+  const handleOpenVideo = useCallback((id: string | null) => {
+    setDeletedNotice(null);
+    setActiveVideoId(id);
   }, []);
 
   const gridDesktopClass = useMemo(() => {
@@ -375,7 +401,7 @@ const App: React.FC = () => {
                 <VideoCard 
                   key={video.id} 
                   video={video} 
-                  onClick={(v: { id: React.SetStateAction<string | null>; }) => setActiveVideoId(v.id)}
+                  onClick={(v: { id: string; }) => handleOpenVideo(v.id)}
                   onMetadataLoaded={updateMetadata}
                 />
               ))}
@@ -429,14 +455,16 @@ const App: React.FC = () => {
         <div className="hidden sm:block">LOCAL-FIRST MEDIA CORE</div>
       </footer>
 
-      {activeVideo && (
+      {(activeVideo || deletedNotice) && (
         <VideoPlayer 
-          video={activeVideo} 
+          video={activeVideo || deletedNotice!} 
           allVideos={filteredAndSortedVideos}
           lang={lang}
-          onClose={() => setActiveVideoId(null)}
-          onSelectVideo={(v: { id: React.SetStateAction<string | null>; }) => setActiveVideoId(v.id)}
+          onClose={() => handleOpenVideo(null)}
+          onSelectVideo={(v: { id: string; }) => handleOpenVideo(v.id)}
           onMetadataLoaded={updateMetadata}
+          onDelete={handleDeleteVideo}
+          deletedNotice={deletedNotice ? { name: deletedNotice.name } : null}
         />
       )}
     </div>
