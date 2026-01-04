@@ -25,6 +25,36 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #52525b;
     }
+    .progress-range {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+    }
+    .progress-range::-webkit-slider-runnable-track {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.35);
+      border-radius: 9999px;
+    }
+    .progress-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 12px;
+      width: 12px;
+      border-radius: 9999px;
+      background: #ffffff;
+      margin-top: -3px;
+    }
+    .progress-range::-moz-range-track {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.35);
+      border-radius: 9999px;
+    }
+    .progress-range::-moz-range-thumb {
+      height: 12px;
+      width: 12px;
+      border-radius: 9999px;
+      background: #ffffff;
+      border: none;
+    }
   </style>
   <script type="importmap">
     {

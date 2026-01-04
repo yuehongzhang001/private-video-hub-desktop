@@ -136,6 +136,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const t = translations[lang];
@@ -147,6 +148,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const [mpvDuration, setMpvDuration] = useState<number | null>(null);
   const electronAPI = window.electronAPI;
   const preferMpv = Boolean(electronAPI?.mpvInit);
+  const sidebarHideTimer = useRef<number | null>(null);
+
+  const setSidebarOpen = useCallback((open: boolean) => {
+    if (sidebarHideTimer.current) {
+      window.clearTimeout(sidebarHideTimer.current);
+      sidebarHideTimer.current = null;
+    }
+    if (open) {
+      setIsSidebarVisible(true);
+      setIsSidebarOpen(true);
+      return;
+    }
+    setIsSidebarOpen(false);
+    sidebarHideTimer.current = window.setTimeout(() => {
+      setIsSidebarVisible(false);
+      sidebarHideTimer.current = null;
+    }, 300);
+  }, []);
   
   const [displaySize, setDisplaySize] = useState<DisplaySize>(() => {
     const saved = localStorage.getItem(DISPLAY_SIZE_STORAGE_KEY);
@@ -162,21 +181,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   useEffect(() => {
     const isMobile = window.innerWidth < 768; // Using md breakpoint as reference
     if (isMobile && isPlaying) {
-      setIsSidebarOpen(false);
+      setSidebarOpen(false);
     }
-  }, [isPlaying]);
+  }, [isPlaying, setSidebarOpen]);
 
   // Add resize listener to handle orientation/device changes
   useEffect(() => {
     const handleResize = () => {
       const isMobile = window.innerWidth < 768;
       if (isMobile) {
-        setIsSidebarOpen(false);
+        setSidebarOpen(false);
       }
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, [setSidebarOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (sidebarHideTimer.current) window.clearTimeout(sidebarHideTimer.current);
+    };
   }, []);
 
   const resetHideTimer = useCallback((forceShow = true) => {
@@ -569,7 +594,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
         </div>
 
         {/* Control Bar */}
-        <div className={`p-4 bg-gray-800/15 border-t border-gray-700/20 space-y-4 transition-all duration-500 absolute bottom-0 left-0 right-0 z-40 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full'}`}>
+        <div className={`px-2 pb-2 pt-0 bg-gray-800/15 border-t border-gray-700/20 space-y-0 transition-all duration-500 absolute bottom-0 left-0 right-0 z-40 ${showControls || !isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full'}`}>
           <div className="px-4">
             <input 
               type="range" min="0" max="100" step="0.01" 
@@ -581,10 +606,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
                 (e.target as HTMLInputElement).blur();
               }}
               onChange={handleProgressChange}
-              className="w-full h-1.5 bg-gray-600/25 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all hover:h-2 outline-none focus:outline-none" 
+              className="w-full h-1.5 py-4 rounded-lg appearance-none cursor-pointer accent-white progress-range transition-all hover:h-2 outline-none focus:outline-none" 
             />
           </div>
-          <div className="flex items-center gap-6 text-zinc-300">
+          <div className="flex items-center gap-6 text-zinc-300 -mt-2">
             <div className="flex items-center gap-4">
               <button onClick={() => { handlePrev(); resetHideTimer(true); }} className="hover:text-white transition-colors"><svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg></button>
               <button onClick={() => { togglePlay(); resetHideTimer(true); }} className="hover:text-white transition-colors">
@@ -599,9 +624,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
               <div className="flex items-center gap-2 group/volume ml-4">
                 <button onClick={() => { toggleMute(); resetHideTimer(true); }} className="hover:text-white transition-colors">
                   {isMuted || volume === 0 ? (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                   ) : (
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 6l4 4h.001M12 18l4-4h.001M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 5.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
+                    <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072M12 6l4 4h.001M12 18l4-4h.001M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 5.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" /></svg>
                   )}
                 </button>
                 <input 
@@ -633,11 +658,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
             </div>
 
             <div className="flex-1" />
-            <div className="text-sm font-mono text-zinc-400 font-bold bg-zinc-900 px-5 py-2.5 rounded-full border border-zinc-800 tracking-tighter shadow-lg">
+            <div className="text-base font-mono text-zinc-400 font-bold bg-zinc-900 px-5 py-2.5 rounded-full border border-zinc-800 tracking-tighter shadow-lg">
               {useMpv ? formatDuration(mpvTime || 0) : formatDuration(videoRef.current?.currentTime)} <span className="text-zinc-700 mx-1">/</span> {useMpv ? formatDuration(mpvDuration || 0) : formatDuration(video.duration)}
             </div>
             <button onClick={() => { toggleFullscreen(); resetHideTimer(true); }} className="bg-white text-black hover:bg-zinc-200 p-3.5 rounded-full transition-all shadow-xl">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {isFullscreen ? (
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
                 ) : (
@@ -650,12 +675,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       </div>
 
       {/* Sidebar */}
-      <div className={`bg-zinc-950 border-l border-zinc-900 flex flex-col transition-all duration-300 ease-in-out relative z-50 overflow-visible ${isSidebarOpen ? 'w-full md:w-80' : 'w-0 border-transparent'}`}>
-        <button onClick={() => { setIsSidebarOpen(!isSidebarOpen); resetHideTimer(true); }} className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-[100] bg-zinc-900 border border-zinc-800 p-5 rounded-l-3xl hover:bg-indigo-600 text-zinc-400 hover:text-white transition-all border-r-0 group flex justify-center items-center shadow-2xl ${showControls || !isPlaying ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
+      <div className={`bg-zinc-950 border-l border-zinc-900 flex flex-col relative z-50 overflow-visible ${isSidebarVisible ? 'w-full md:w-80' : 'w-0 border-transparent'}`}>
+        <button onClick={() => { setSidebarOpen(!isSidebarOpen); resetHideTimer(true); }} className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full z-[100] bg-zinc-900 border border-zinc-800 p-5 rounded-l-3xl hover:bg-indigo-600 text-zinc-400 hover:text-white transition-all border-r-0 group flex justify-center items-center shadow-2xl ${showControls || !isPlaying ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}>
           <svg className={`w-7 h-7 transition-transform duration-300 ${isSidebarOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
         </button>
 
-        <div className={`flex flex-col h-full w-full min-w-[320px] transition-opacity duration-300 ${!isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <div className={`flex flex-col h-full w-full min-w-[320px] transform-gpu transition-transform transition-opacity duration-300 ease-in-out ${!isSidebarOpen ? 'opacity-0 pointer-events-none translate-x-full' : 'opacity-100 translate-x-0'}`}>
           <div className="p-6 border-b border-zinc-900 flex flex-col gap-4 sticky top-0 bg-zinc-950 z-20">
             <h3 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em]">{t.playlist}</h3>
             <div className="flex items-center gap-3">
