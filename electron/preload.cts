@@ -151,6 +151,7 @@ try {
       addonError: mpvAddonError,
       libPath: resolveLibmpvPath()
     }),
+    favoritesFetchMeta: (url: string) => ipcRenderer.invoke('favorites:fetchMeta', url),
     // 可以在这里添加更多的 API
   });
 

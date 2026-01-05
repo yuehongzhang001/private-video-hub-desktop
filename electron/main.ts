@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import { createThumbnail } from './ffmpeg.js';
+import { fetchFavoritesMeta } from './favoritesMeta.js';
 
 type LogLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
 
@@ -373,6 +374,13 @@ ipcMain.handle('file:trash', async (_event, filePath: string) => {
 
 ipcMain.handle('ffmpeg:thumbnail', async (_event, options: { inputPath: string; outputPath?: string; width?: number; height?: number; quality?: number }) => {
   return await createThumbnail(options);
+});
+
+ipcMain.handle('favorites:fetchMeta', async (_event, targetUrl: string) => {
+  if (typeof targetUrl !== 'string' || !targetUrl.trim()) {
+    return { ok: false, error: 'missing_url' };
+  }
+  return await fetchFavoritesMeta(targetUrl);
 });
 
 ipcMain.handle('mpv:play', async (_event, filePath: string) => {
