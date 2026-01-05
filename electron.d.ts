@@ -23,7 +23,17 @@ declare global {
       mpvRenderFrame?: (width: number, height: number) => { ok: boolean; error?: string; frame: Uint8Array | null };
       mpvDestroy?: () => { ok: boolean; error?: string };
       mpvDebug?: () => { addonPath: string | null; addonError: string | null; libPath: string | undefined };
-      favoritesFetchMeta?: (url: string) => Promise<{ ok: boolean; error?: string; data?: { title?: string; duration?: string; image?: string } }>;
+      favoritesFetchMeta?: (url: string) => Promise<{
+        ok: boolean;
+        error?: string;
+        data?: {
+          title?: string;
+          duration?: string;
+          image?: string;
+          siteName?: string;
+          siteIconUrl?: string;
+        };
+      }>;
     };
   }
 }

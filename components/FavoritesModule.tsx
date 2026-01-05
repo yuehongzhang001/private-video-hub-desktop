@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TranslationBundle } from '../translations';
 
 type FavoriteItem = {
@@ -8,6 +8,8 @@ type FavoriteItem = {
   url: string;
   duration?: string;
   note?: string;
+  siteName?: string;
+  siteIconUrl?: string;
   thumbnailUrl?: string;
   thumbnailDataUrl?: string;
   createdAt: number;
@@ -22,6 +24,8 @@ type FormState = {
   url: string;
   duration: string;
   note: string;
+  siteName: string;
+  siteIconUrl: string;
   thumbnailUrl: string;
   thumbnailDataUrl: string;
 };
@@ -35,6 +39,8 @@ const emptyForm: FormState = {
   url: '',
   duration: '',
   note: '',
+  siteName: '',
+  siteIconUrl: '',
   thumbnailUrl: '',
   thumbnailDataUrl: ''
 };
@@ -52,16 +58,54 @@ const parseFavorites = (raw: string | null): FavoriteItem[] => {
   }
 };
 
+const sanitizeJsonInput = (raw: string) => {
+  const trimmed = raw.trim().replace(/^\uFEFF/, '');
+  const withoutFences = trimmed
+    .replace(/^```(?:json)?/i, '')
+    .replace(/```$/i, '')
+    .trim();
+  return withoutFences.replace(/,\s*([}\]])/g, '$1');
+};
+
+const getFallbackTitle = (rawUrl: string) => {
+  if (!rawUrl) return 'Untitled';
+  const clean = rawUrl.split('#')[0];
+  const withoutQuery = clean.split('?')[0];
+  const trimmed = withoutQuery.replace(/\/+$/, '');
+  const last = trimmed.split('/').pop() || trimmed;
+  return last || 'Untitled';
+};
+
+const getSiteNameFromUrl = (rawUrl: string) => {
+  if (!rawUrl) return '';
+  try {
+    const hostname = new URL(rawUrl).hostname;
+    const trimmed = hostname.replace(/^www\./i, '');
+    return trimmed;
+  } catch {
+    return '';
+  }
+};
+
 const normalizeFavorite = (item: any): FavoriteItem | null => {
   if (!item || typeof item !== 'object') return null;
-  const title = String(item.title ?? item.name ?? '').trim();
   const url = String(item.url ?? item.link ?? item.href ?? '').trim();
-  if (!title || !url) return null;
+  if (!url) return null;
+  const titleRaw = item.title ?? item.name;
+  const title =
+    titleRaw != null && String(titleRaw).trim()
+      ? String(titleRaw).trim()
+      : getFallbackTitle(url);
 
   const createdAt = typeof item.createdAt === 'number' ? item.createdAt : Date.now();
   const lastAccessedAt = typeof item.lastAccessedAt === 'number' ? item.lastAccessedAt : undefined;
   const duration = item.duration != null ? String(item.duration).trim() : '';
   const note = item.note != null ? String(item.note).trim() : '';
+  const siteName = item.siteName ?? item.site ?? item.site_name ?? item.siteTitle ?? '';
+  const siteIconUrl = item.siteIconUrl ?? item.siteIcon ?? item.icon ?? item.favicon ?? '';
+  const siteNameText = siteName != null ? String(siteName).trim() : '';
+  const derivedSiteName = siteNameText || getSiteNameFromUrl(url);
+  const siteIconText = siteIconUrl != null ? String(siteIconUrl).trim() : '';
   const thumbnailUrl = item.thumbnailUrl != null ? String(item.thumbnailUrl).trim() : '';
   const thumbnailDataUrl = item.thumbnailDataUrl != null ? String(item.thumbnailDataUrl).trim() : '';
 
@@ -71,6 +115,8 @@ const normalizeFavorite = (item: any): FavoriteItem | null => {
     url,
     duration: duration || undefined,
     note: note || undefined,
+    siteName: derivedSiteName || undefined,
+    siteIconUrl: siteIconText || undefined,
     thumbnailUrl: thumbnailUrl || undefined,
     thumbnailDataUrl: thumbnailDataUrl || undefined,
     createdAt,
@@ -114,6 +160,7 @@ const FavoriteCard: React.FC<{
   const [imageFailed, setImageFailed] = useState(false);
   const imageSrc = item.thumbnailDataUrl || item.thumbnailUrl;
   const showImage = Boolean(imageSrc) && !imageFailed;
+  const showSiteIcon = Boolean(item.siteIconUrl);
 
   return (
     <div
@@ -149,6 +196,18 @@ const FavoriteCard: React.FC<{
       <div className={`${viewMode === 'list' ? 'flex-1' : 'mt-4'} flex flex-col h-full space-y-3`}>
         <div>
           <h3 className="text-white text-sm font-black uppercase tracking-wide line-clamp-2">{item.title}</h3>
+          {(item.siteName || showSiteIcon) && (
+            <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-widest text-zinc-500">
+              {showSiteIcon && (
+                <img
+                  src={item.siteIconUrl}
+                  alt={item.siteName || item.title}
+                  className="w-4 h-4 rounded-sm border border-zinc-800/60 bg-zinc-900"
+                />
+              )}
+              {item.siteName && <span>{item.siteName}</span>}
+            </div>
+          )}
         </div>
         {item.note && (
           <p className="text-zinc-400 text-xs leading-relaxed line-clamp-2">{item.note}</p>
@@ -218,11 +277,18 @@ export const FavoritesModule: React.FC<{
   const [formMode, setFormMode] = useState<'manual' | 'json'>('manual');
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<FavoriteItem[] | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isFetchingMeta, setIsFetchingMeta] = useState(false);
   const [fetchError, setFetchError] = useState('');
   const [jsonInput, setJsonInput] = useState('');
   const [jsonError, setJsonError] = useState('');
+  const [jsonSuccess, setJsonSuccess] = useState('');
+  const lastOpenAddSignalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    lastOpenAddSignalRef.current = typeof openAddSignal === 'number' ? openAddSignal : null;
+  }, []);
 
   const handleOpen = useCallback((item: FavoriteItem) => {
     setFavorites((prev) =>
@@ -244,8 +310,10 @@ export const FavoritesModule: React.FC<{
 
   const handleEdit = useCallback((item: FavoriteItem) => {
     setEditingId(item.id);
+    setPendingImport(null);
     setFormMode('manual');
     setJsonError('');
+    setJsonSuccess('');
     setFetchError('');
     setIsFetchingMeta(false);
     setJsonInput(JSON.stringify({
@@ -253,6 +321,8 @@ export const FavoritesModule: React.FC<{
       url: item.url,
       duration: item.duration,
       note: item.note,
+      siteName: item.siteName,
+      siteIconUrl: item.siteIconUrl,
       thumbnailUrl: item.thumbnailUrl,
       thumbnailDataUrl: item.thumbnailDataUrl
     }, null, 2));
@@ -261,6 +331,8 @@ export const FavoritesModule: React.FC<{
       url: item.url,
       duration: item.duration || '',
       note: item.note || '',
+      siteName: item.siteName || '',
+      siteIconUrl: item.siteIconUrl || '',
       thumbnailUrl: item.thumbnailUrl || '',
       thumbnailDataUrl: item.thumbnailDataUrl || ''
     });
@@ -280,6 +352,8 @@ export const FavoritesModule: React.FC<{
                 url: form.url.trim(),
                 duration: form.duration.trim() || undefined,
                 note: form.note.trim() || undefined,
+                siteName: form.siteName.trim() || undefined,
+                siteIconUrl: form.siteIconUrl.trim() || undefined,
                 thumbnailUrl: form.thumbnailUrl.trim() || undefined,
                 thumbnailDataUrl: form.thumbnailDataUrl || undefined
               }
@@ -288,28 +362,48 @@ export const FavoritesModule: React.FC<{
       );
     } else {
       const now = Date.now();
-      const next: FavoriteItem = {
+      const manualEntry: FavoriteItem = {
         id: `fav-${now}-${Math.random().toString(16).slice(2)}`,
         title: form.title.trim(),
         url: form.url.trim(),
         duration: form.duration.trim() || undefined,
         note: form.note.trim() || undefined,
+        siteName: form.siteName.trim() || undefined,
+        siteIconUrl: form.siteIconUrl.trim() || undefined,
         thumbnailUrl: form.thumbnailUrl.trim() || undefined,
         thumbnailDataUrl: form.thumbnailDataUrl || undefined,
         createdAt: now
       };
-      setFavorites((prev) => [next, ...prev]);
+      const nextItems = pendingImport?.length
+        ? [
+            {
+              ...pendingImport[0],
+              title: manualEntry.title,
+              url: manualEntry.url,
+              duration: manualEntry.duration,
+              note: manualEntry.note,
+              siteName: manualEntry.siteName,
+              siteIconUrl: manualEntry.siteIconUrl,
+              thumbnailUrl: manualEntry.thumbnailUrl,
+              thumbnailDataUrl: manualEntry.thumbnailDataUrl
+            },
+            ...pendingImport.slice(1)
+          ]
+        : [manualEntry];
+      setFavorites((prev) => [...nextItems, ...prev]);
     }
 
     setEditingId(null);
+    setPendingImport(null);
     setForm(emptyForm);
     setFetchError('');
     setIsFetchingMeta(false);
     setIsFormOpen(false);
-  }, [editingId, form, setFavorites]);
+  }, [editingId, form, pendingImport, setFavorites]);
 
   const handleCancelEdit = useCallback(() => {
     setEditingId(null);
+    setPendingImport(null);
     setForm(emptyForm);
     setFetchError('');
     setIsFetchingMeta(false);
@@ -318,20 +412,30 @@ export const FavoritesModule: React.FC<{
 
   const handleOpenAdd = useCallback(() => {
     setEditingId(null);
+    setPendingImport(null);
     setForm(emptyForm);
     setFormMode('manual');
     setJsonInput('');
     setJsonError('');
+    setJsonSuccess('');
     setFetchError('');
     setIsFetchingMeta(false);
     setIsFormOpen(true);
   }, []);
 
   useEffect(() => {
-    if (typeof openAddSignal === 'number' && openAddSignal > 0) {
+    if (typeof openAddSignal === 'number' && openAddSignal > 0 && openAddSignal !== lastOpenAddSignalRef.current) {
+      lastOpenAddSignalRef.current = openAddSignal;
       handleOpenAdd();
     }
   }, [openAddSignal, handleOpenAdd]);
+
+  useEffect(() => {
+    if (formMode !== 'json') {
+      setJsonError('');
+      setJsonSuccess('');
+    }
+  }, [formMode]);
 
   const handleFetchMeta = useCallback(async () => {
     const url = form.url.trim();
@@ -354,7 +458,8 @@ export const FavoritesModule: React.FC<{
       }
 
       const { title, duration, image } = result.data;
-      if (!title && !duration && !image) {
+      const { siteName, siteIconUrl } = result.data;
+      if (!title && !duration && !image && !siteName && !siteIconUrl) {
         setFetchError(t.favoritesFetchFailed);
         return;
       }
@@ -363,8 +468,13 @@ export const FavoritesModule: React.FC<{
         ...prev,
         title: title || prev.title,
         duration: duration || prev.duration,
-        thumbnailUrl: image || prev.thumbnailUrl
+        thumbnailUrl: image || prev.thumbnailUrl,
+        siteName: siteName || prev.siteName,
+        siteIconUrl: siteIconUrl || prev.siteIconUrl
       }));
+      if (!title || !duration || !image || !siteName || !siteIconUrl) {
+        setFetchError(t.favoritesFetchPartial);
+      }
     } catch {
       setFetchError(t.favoritesFetchFailed);
     } finally {
@@ -373,9 +483,10 @@ export const FavoritesModule: React.FC<{
   }, [form.url, t.favoritesFetchFailed, t.favoritesFetchMissingUrl, t.favoritesFetchUnavailable]);
 
   const handleJsonImport = useCallback(() => {
-    if (!jsonInput.trim()) return;
+    const cleaned = sanitizeJsonInput(jsonInput);
+    if (!cleaned) return;
     try {
-      const parsed = JSON.parse(jsonInput);
+      const parsed = JSON.parse(cleaned);
       const list = Array.isArray(parsed) ? parsed : [parsed];
       const normalized = list
         .map((item) => normalizeFavorite(item))
@@ -385,13 +496,28 @@ export const FavoritesModule: React.FC<{
         setJsonError(t.favoritesInvalidJson);
         return;
       }
-      setFavorites((prev) => [...normalized, ...prev]);
-      setJsonInput('');
+      const first = normalized[0];
       setJsonError('');
+      setJsonSuccess(t.favoritesJsonSuccess);
+      setPendingImport(normalized);
+      setFormMode('manual');
+      setForm({
+        title: first.title,
+        url: first.url,
+        duration: first.duration || '',
+        note: first.note || '',
+        siteName: first.siteName || '',
+        siteIconUrl: first.siteIconUrl || '',
+        thumbnailUrl: first.thumbnailUrl || '',
+        thumbnailDataUrl: first.thumbnailDataUrl || ''
+      });
+      setEditingId(null);
+      setFetchError('');
+      setIsFetchingMeta(false);
     } catch {
       setJsonError(t.favoritesInvalidJson);
     }
-  }, [jsonInput, setFavorites, t.favoritesInvalidJson]);
+  }, [jsonInput, t.favoritesInvalidJson, t.favoritesJsonSuccess]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -598,6 +724,35 @@ export const FavoritesModule: React.FC<{
                     />
                   </label>
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="text-zinc-500 text-xs font-bold uppercase tracking-widest">
+                    {t.favoritesSiteNameLabel}
+                    <input
+                      value={form.siteName}
+                      onChange={(event) => setForm((prev) => ({ ...prev, siteName: event.target.value }))}
+                      placeholder={t.favoritesSiteNameLabel}
+                      className="mt-2 w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                    />
+                  </label>
+                  <label className="text-zinc-500 text-xs font-bold uppercase tracking-widest">
+                    {t.favoritesSiteIconLabel}
+                    <div className="mt-2 flex items-center gap-3">
+                      <input
+                        value={form.siteIconUrl}
+                        onChange={(event) => setForm((prev) => ({ ...prev, siteIconUrl: event.target.value }))}
+                        placeholder="https://favicon..."
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                      />
+                      {form.siteIconUrl && (
+                        <img
+                          src={form.siteIconUrl}
+                          alt={form.siteName || t.favoritesSiteIconLabel}
+                          className="w-9 h-9 rounded-lg border border-zinc-800 object-cover"
+                        />
+                      )}
+                    </div>
+                  </label>
+                </div>
                 <div className="text-zinc-500 text-xs font-bold uppercase tracking-widest">
                   {t.favoritesThumbUploadLabel}
                   <div className="mt-2 flex items-center gap-3">
@@ -642,11 +797,16 @@ export const FavoritesModule: React.FC<{
               <div className="space-y-4 mt-6">
                 <textarea
                   value={jsonInput}
-                  onChange={(event) => setJsonInput(event.target.value)}
+                  onChange={(event) => {
+                    setJsonInput(event.target.value);
+                    if (jsonError) setJsonError('');
+                    if (jsonSuccess) setJsonSuccess('');
+                  }}
                   placeholder={t.favoritesJsonPlaceholder}
                   className="w-full min-h-[220px] bg-zinc-950 border border-zinc-800 rounded-2xl px-5 py-4 text-sm text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 outline-none resize-none"
                 />
                 {jsonError && <p className="text-red-400 text-xs font-bold uppercase tracking-widest">{jsonError}</p>}
+                {jsonSuccess && <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest">{jsonSuccess}</p>}
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleJsonImport}
