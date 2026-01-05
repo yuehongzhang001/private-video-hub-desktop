@@ -383,6 +383,32 @@ ipcMain.handle('favorites:fetchMeta', async (_event, targetUrl: string) => {
   return await fetchFavoritesMeta(targetUrl);
 });
 
+ipcMain.handle('favorites:importCover', async (_event, sourcePath: string) => {
+  if (typeof sourcePath !== 'string' || !sourcePath.trim()) {
+    return { ok: false, error: 'missing_path' };
+  }
+
+  const resolvedPath = sourcePath.startsWith('file://') ? fileURLToPath(sourcePath) : sourcePath;
+  try {
+    const stat = await fs.promises.stat(resolvedPath);
+    if (!stat.isFile()) {
+      return { ok: false, error: 'not_file' };
+    }
+
+    const coversDir = path.join(app.getPath('userData'), 'favorites-covers');
+    await fs.promises.mkdir(coversDir, { recursive: true });
+    const ext = path.extname(resolvedPath).toLowerCase();
+    const safeExt = ext && ext.length <= 10 ? ext : '';
+    const filename = `cover-${Date.now()}-${Math.random().toString(16).slice(2)}${safeExt}`;
+    const targetPath = path.join(coversDir, filename);
+    await fs.promises.copyFile(resolvedPath, targetPath);
+
+    return { ok: true, path: targetPath, url: pathToFileURL(targetPath).toString() };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
 ipcMain.handle('mpv:play', async (_event, filePath: string) => {
   if (typeof filePath !== 'string' || !filePath.trim()) {
     return { ok: false, error: 'missing_path' };

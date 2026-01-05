@@ -152,6 +152,7 @@ try {
       libPath: resolveLibmpvPath()
     }),
     favoritesFetchMeta: (url: string) => ipcRenderer.invoke('favorites:fetchMeta', url),
+    favoritesImportCover: (sourcePath: string) => ipcRenderer.invoke('favorites:importCover', sourcePath),
     // 可以在这里添加更多的 API
   });
 

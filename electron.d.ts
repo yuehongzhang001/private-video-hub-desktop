@@ -34,6 +34,12 @@ declare global {
           siteIconUrl?: string;
         };
       }>;
+      favoritesImportCover?: (sourcePath: string) => Promise<{
+        ok: boolean;
+        error?: string;
+        path?: string;
+        url?: string;
+      }>;
     };
   }
 }

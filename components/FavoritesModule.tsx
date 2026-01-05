@@ -17,7 +17,7 @@ type FavoriteItem = {
 };
 
 type SortMode = 'recent' | 'accessed';
-type ViewMode = 'grid' | 'list';
+type ColumnsMode = 4 | 5;
 
 type FormState = {
   title: string;
@@ -31,8 +31,9 @@ type FormState = {
 };
 
 const FAVORITES_STORAGE_KEY = 'vhub-favorites';
-const FAVORITES_VIEW_KEY = 'vhub-favorites-view';
+const FAVORITES_COLUMNS_KEY = 'vhub-favorites-columns';
 const FAVORITES_SORT_KEY = 'vhub-favorites-sort';
+const FAVORITES_PAGE_SIZE = 20;
 
 const emptyForm: FormState = {
   title: '',
@@ -151,31 +152,36 @@ const formatTime = (ts?: number) => {
 
 const FavoriteCard: React.FC<{
   item: FavoriteItem;
-  viewMode: ViewMode;
   onOpen: (item: FavoriteItem) => void;
   onEdit: (item: FavoriteItem) => void;
   onDelete: (item: FavoriteItem) => void;
   t: TranslationBundle;
-}> = ({ item, viewMode, onOpen, onEdit, onDelete, t }) => {
+}> = ({ item, onOpen, onEdit, onDelete, t }) => {
   const [imageFailed, setImageFailed] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
   const imageSrc = item.thumbnailDataUrl || item.thumbnailUrl;
   const showImage = Boolean(imageSrc) && !imageFailed;
   const showSiteIcon = Boolean(item.siteIconUrl);
 
+  const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = event.currentTarget;
+    if (!target.naturalWidth || !target.naturalHeight) return;
+    setIsPortrait(target.naturalHeight > target.naturalWidth);
+  };
+
   return (
     <div
       onClick={() => onOpen(item)}
-      className={`group cursor-pointer rounded-2xl border border-zinc-800/60 bg-zinc-900/40 hover:bg-zinc-900/70 transition-all shadow-lg h-full ${
-        viewMode === 'list' ? 'flex gap-6 p-5' : 'p-5'
-      }`}
+      className="group cursor-pointer rounded-2xl border border-zinc-800/60 bg-zinc-900/40 hover:bg-zinc-900/70 transition-all shadow-lg h-full p-5"
     >
-      <div className={`${viewMode === 'list' ? 'w-44 shrink-0' : 'w-full'} relative`}>
+      <div className="w-full relative">
         <div className="aspect-video rounded-xl overflow-hidden border border-zinc-800/60 bg-zinc-950">
           {showImage ? (
             <img
               src={imageSrc}
               alt={item.title}
-              className="w-full h-full object-cover"
+              className={`w-full h-full ${isPortrait ? 'object-contain bg-black' : 'object-cover'}`}
+              onLoad={handleImageLoad}
               onError={() => setImageFailed(true)}
             />
           ) : (
@@ -193,7 +199,7 @@ const FavoriteCard: React.FC<{
         )}
       </div>
 
-      <div className={`${viewMode === 'list' ? 'flex-1' : 'mt-4'} flex flex-col h-full space-y-3`}>
+      <div className="mt-4 flex flex-col h-full space-y-3">
         <div>
           <h3 className="text-white text-sm font-black uppercase tracking-wide line-clamp-2">{item.title}</h3>
           {(item.siteName || showSiteIcon) && (
@@ -272,7 +278,11 @@ export const FavoritesModule: React.FC<{
     [],
     parseFavorites
   );
-  const [viewMode, setViewMode] = useLocalStorageState<ViewMode>(FAVORITES_VIEW_KEY, 'grid');
+  const [columnsMode, setColumnsMode] = useLocalStorageState<ColumnsMode>(
+    FAVORITES_COLUMNS_KEY,
+    4,
+    (raw) => (raw === '5' ? 5 : 4)
+  );
   const [sortMode, setSortMode] = useLocalStorageState<SortMode>(FAVORITES_SORT_KEY, 'recent');
   const [formMode, setFormMode] = useState<'manual' | 'json'>('manual');
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -284,6 +294,7 @@ export const FavoritesModule: React.FC<{
   const [jsonInput, setJsonInput] = useState('');
   const [jsonError, setJsonError] = useState('');
   const [jsonSuccess, setJsonSuccess] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const lastOpenAddSignalRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -519,9 +530,23 @@ export const FavoritesModule: React.FC<{
     }
   }, [jsonInput, t.favoritesInvalidJson, t.favoritesJsonSuccess]);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    const filePath = (file as File & { path?: string }).path;
+    if (filePath && window.electronAPI?.favoritesImportCover) {
+      const result = await window.electronAPI.favoritesImportCover(filePath);
+      if (result?.ok && result.url) {
+        setForm((prev) => ({
+          ...prev,
+          thumbnailUrl: result.url || '',
+          thumbnailDataUrl: ''
+        }));
+        event.target.value = '';
+        return;
+      }
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const result = typeof reader.result === 'string' ? reader.result : '';
@@ -552,6 +577,29 @@ export const FavoritesModule: React.FC<{
     });
   }, [favorites, searchQuery, sortMode]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredFavorites.length / FAVORITES_PAGE_SIZE));
+  useEffect(() => {
+    setCurrentPage((prev) => Math.min(Math.max(1, prev), totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, sortMode]);
+
+  const pagedFavorites = useMemo(() => {
+    const start = (currentPage - 1) * FAVORITES_PAGE_SIZE;
+    return filteredFavorites.slice(start, start + FAVORITES_PAGE_SIZE);
+  }, [currentPage, filteredFavorites]);
+
+  const [uploadPreviewPortrait, setUploadPreviewPortrait] = useState(false);
+  const uploadPreviewSrc =
+    form.thumbnailDataUrl || (form.thumbnailUrl.startsWith('file://') ? form.thumbnailUrl : '');
+  const handleUploadPreviewLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    const target = event.currentTarget;
+    if (!target.naturalWidth || !target.naturalHeight) return;
+    setUploadPreviewPortrait(target.naturalHeight > target.naturalWidth);
+  };
+
   return (
     <div className="space-y-10">
       <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-3xl p-6 space-y-0">
@@ -567,22 +615,23 @@ export const FavoritesModule: React.FC<{
             <option value="recent">{t.favoritesSortRecent}</option>
             <option value="accessed">{t.favoritesSortAccessed}</option>
           </select>
-          <div className="flex bg-zinc-950 border border-zinc-800 rounded-full p-1">
+          <div className="flex items-center gap-3 bg-zinc-950 border border-zinc-800 rounded-full p-1">
+            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 px-3">{t.favoritesColumnsLabel}</span>
             <button
-              onClick={() => setViewMode('grid')}
+              onClick={() => setColumnsMode(4)}
               className={`px-4 py-1.5 text-[11px] font-black uppercase tracking-widest rounded-full transition-colors ${
-                viewMode === 'grid' ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-white'
+                columnsMode === 4 ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-white'
               }`}
             >
-              {t.favoritesViewGrid}
+              {t.favoritesColumns4}
             </button>
             <button
-              onClick={() => setViewMode('list')}
+              onClick={() => setColumnsMode(5)}
               className={`px-4 py-1.5 text-[11px] font-black uppercase tracking-widest rounded-full transition-colors ${
-                viewMode === 'list' ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-white'
+                columnsMode === 5 ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-white'
               }`}
             >
-              {t.favoritesViewList}
+              {t.favoritesColumns5}
             </button>
           </div>
         </div>
@@ -594,23 +643,45 @@ export const FavoritesModule: React.FC<{
           <p className="text-zinc-500 text-sm mt-4">{t.favoritesEmptyDesc}</p>
         </div>
       ) : (
-        <div
-          className={`grid gap-6 ${
-            viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'
-          }`}
-        >
-          {filteredFavorites.map((item) => (
-            <FavoriteCard
-              key={item.id}
-              item={item}
-              viewMode={viewMode}
-              onOpen={handleOpen}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              t={t}
-            />
-          ))}
-        </div>
+        <>
+          <div
+            className={`grid gap-6 ${
+              columnsMode === 5
+                ? 'grid-cols-5'
+                : 'grid-cols-4'
+            }`}
+          >
+            {pagedFavorites.map((item) => (
+              <FavoriteCard
+                key={item.id}
+                item={item}
+                onOpen={handleOpen}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                t={t}
+              />
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-6">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={currentPage <= 1}
+              className="px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {t.favoritesPagePrev}
+            </button>
+            <span className="text-zinc-500 text-xs font-bold uppercase tracking-widest">
+              {t.favoritesPageInfo(currentPage, totalPages)}
+            </span>
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+              disabled={currentPage >= totalPages}
+              className="px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {t.favoritesPageNext}
+            </button>
+          </div>
+        </>
       )}
 
       {isFormOpen && (
@@ -760,20 +831,25 @@ export const FavoritesModule: React.FC<{
                       {t.favoritesThumbUploadLabel}
                       <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
                     </label>
-                    {form.thumbnailDataUrl && (
+                    {uploadPreviewSrc && (
                       <button
-                        onClick={() => setForm((prev) => ({ ...prev, thumbnailDataUrl: '' }))}
+                        onClick={() => setForm((prev) => ({
+                          ...prev,
+                          thumbnailDataUrl: '',
+                          thumbnailUrl: prev.thumbnailUrl.startsWith('file://') ? '' : prev.thumbnailUrl
+                        }))}
                         className="text-[11px] font-black uppercase tracking-widest text-zinc-400 hover:text-white"
                       >
                         {t.favoritesClearThumb}
                       </button>
                     )}
                   </div>
-                  {form.thumbnailDataUrl && (
+                  {uploadPreviewSrc && (
                     <img
-                      src={form.thumbnailDataUrl}
+                      src={uploadPreviewSrc}
                       alt={t.favoritesThumbUploadLabel}
-                      className="mt-3 h-20 rounded-lg border border-zinc-800 object-cover"
+                      className={`mt-3 h-20 rounded-lg border border-zinc-800 ${uploadPreviewPortrait ? 'object-contain bg-black' : 'object-cover'}`}
+                      onLoad={handleUploadPreviewLoad}
                     />
                   )}
                 </div>
