@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [deletedNotice, setDeletedNotice] = useState<VideoItem | null>(null);
+  const [playlistAnchorIndex, setPlaylistAnchorIndex] = useState<number | null>(null);
   const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem(LANG_STORAGE_KEY);
     return (saved as Language) || 'en';
@@ -201,6 +202,9 @@ const App: React.FC = () => {
     const result = await window.electronAPI.trashItem(video.path);
     if (!result?.ok) return result;
 
+    const anchorIndex = filteredAndSortedVideos.findIndex(v => v.id === video.id);
+    setPlaylistAnchorIndex(anchorIndex >= 0 ? anchorIndex : null);
+
     setVideos(prev => {
       const target = prev.find(v => v.id === video.id);
       if (target?.url.startsWith('blob:')) URL.revokeObjectURL(target.url);
@@ -211,7 +215,7 @@ const App: React.FC = () => {
     setDeletedNotice(video);
 
     return result;
-  }, []);
+  }, [filteredAndSortedVideos]);
 
   const totalPages = Math.ceil(filteredAndSortedVideos.length / PAGE_SIZE);
   const paginatedVideos = useMemo(() => {
@@ -231,6 +235,7 @@ const App: React.FC = () => {
 
   const handleOpenVideo = useCallback((id: string | null) => {
     setDeletedNotice(null);
+    setPlaylistAnchorIndex(null);
     setActiveVideoId(id);
   }, []);
 
@@ -525,6 +530,7 @@ const App: React.FC = () => {
           onMetadataLoaded={updateMetadata}
           onDelete={handleDeleteVideo}
           deletedNotice={deletedNotice ? { name: deletedNotice.name } : null}
+          playlistAnchorIndex={playlistAnchorIndex}
         />
       )}
     </div>

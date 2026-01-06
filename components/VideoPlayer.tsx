@@ -14,6 +14,7 @@ interface VideoPlayerProps {
   onMetadataLoaded: (id: string, thumbnail: string, duration: number) => void;
   onDelete?: (video: VideoItem) => Promise<{ ok: boolean; error?: string }> | { ok: boolean; error?: string };
   deletedNotice?: { name: string } | null;
+  playlistAnchorIndex?: number | null;
 }
 
 const PLAYLIST_SORT_STORAGE_KEY = 'playlist-sort-mode';
@@ -178,7 +179,7 @@ const PlaylistItem = React.memo(({
 });
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
-  const { video, allVideos, lang, onClose, onSelectVideo, onMetadataLoaded, onDelete, deletedNotice } = props;
+  const { video, allVideos, lang, onClose, onSelectVideo, onMetadataLoaded, onDelete, deletedNotice, playlistAnchorIndex } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const mpvCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -723,13 +724,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     switch (playlistSortMode) {
       case SortMode.AFTER_CURRENT:
         const idx = allVideos.findIndex((v: { id: any; }) => v.id === video.id);
-        return idx !== -1 ? [...allVideos.slice(idx + 1), ...allVideos.slice(0, idx + 1)] : allVideos;
+        if (idx !== -1) return [...allVideos.slice(idx + 1), ...allVideos.slice(0, idx + 1)];
+        if (result.length === 0 || playlistAnchorIndex === null || playlistAnchorIndex === undefined) return result;
+        const safeIndex = Math.max(0, Math.min(playlistAnchorIndex, result.length - 1));
+        return safeIndex > 0 ? [...result.slice(safeIndex), ...result.slice(0, safeIndex)] : result;
       case SortMode.NEWEST: return result.sort((a, b) => b.lastModified - a.lastModified);
       case SortMode.SIZE: return result.sort((a, b) => b.size - a.size);
       case SortMode.RANDOM: return result.sort(() => Math.random() - 0.5);
       default: return result;
     }
-  }, [allVideos, playlistSortMode, video.id]);
+  }, [allVideos, playlistSortMode, video.id, playlistAnchorIndex]);
 
   const handleNext = () => onSelectVideo(sortedPlaylist[(sortedPlaylist.findIndex((v: { id: any; }) => v.id === video.id) + 1) % sortedPlaylist.length]);
   const handlePrev = () => onSelectVideo(sortedPlaylist[(sortedPlaylist.findIndex((v: { id: any; }) => v.id === video.id) - 1 + sortedPlaylist.length) % sortedPlaylist.length]);

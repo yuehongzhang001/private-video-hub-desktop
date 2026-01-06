@@ -72,6 +72,16 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
     return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const getExtension = (value?: string) => {
+    if (!value) return 'VIDEO';
+    const lastSegment = value.split(/[\\/]/).pop() || value;
+    const dotIndex = lastSegment.lastIndexOf('.');
+    if (dotIndex <= 0 || dotIndex === lastSegment.length - 1) return 'VIDEO';
+    return lastSegment.slice(dotIndex + 1).toUpperCase();
+  };
+
+  const videoExt = useMemo(() => getExtension(video.name || video.path), [video.name, video.path]);
+
   const previewUrl = useMemo(() => {
     if (!isHovered) return "";
     const startTime = (video.duration !== undefined && video.duration < 15) ? 1 : 10;
@@ -187,7 +197,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
           <p className="text-xs text-zinc-500 font-bold uppercase tracking-tight">
             {(video.size / (1024 * 1024)).toFixed(1)} MB
           </p>
-          <div className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">MP4</div>
+          <div className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">{videoExt}</div>
         </div>
       </div>
     </div>

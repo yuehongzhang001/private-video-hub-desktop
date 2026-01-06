@@ -80,6 +80,7 @@ try {
     createThumbnail: (inputPath: string, options?: { outputPath?: string; width?: number; height?: number; quality?: number }) => {
       return ipcRenderer.invoke('ffmpeg:thumbnail', { inputPath, ...(options || {}) });
     },
+    trashItem: (filePath: string) => ipcRenderer.invoke('file:trash', filePath),
     playWithMpv: (filePath: string) => ipcRenderer.invoke('mpv:play', filePath),
     mpvInit: () => {
       if (!mpvAddon) return { ok: false, error: 'addon_missing' };
