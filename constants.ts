@@ -19,3 +19,11 @@ export const THUMBNAIL_WIDTH = 320;
 export const THUMBNAIL_HEIGHT = 180;
 export const PREVIEW_DELAY = 500; // Reduced to 500ms (0.5s) per user request
 export const THUMBNAIL_GENERATOR: 'browser' | 'ffmpeg' = 'ffmpeg';
+
+export const HTML_VIDEO_PREVIEW_EXTENSIONS = new Set([
+  '.mp4',
+  '.m4v',
+  '.mov',
+  '.webm',
+  '.ogv'
+]);

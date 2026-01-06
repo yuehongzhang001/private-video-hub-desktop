@@ -4,6 +4,7 @@ import { VideoItem, SortMode, DisplaySize } from '../types';
 import { PREVIEW_DELAY } from '../constants';
 import { thumbnailService } from '../services/ThumbnailService';
 import { translations, Language } from '../translations';
+import { mpvController } from '../services/MpvController';
 
 interface VideoPlayerProps {
   video: VideoItem;
@@ -21,8 +22,8 @@ const PLAYLIST_SORT_STORAGE_KEY = 'playlist-sort-mode';
 const DISPLAY_SIZE_STORAGE_KEY = 'vhub-display-size';
 const AUTO_HIDE_TIMEOUT = 3000;
 const MPV_POLL_INTERVAL_MS = 100;
-const MPV_SEEK_DEBOUNCE_MS = 100;
-const MPV_SEEK_HOLD_TIMEOUT_MS = 1000;
+const MPV_SEEK_ACK_THRESHOLD = 0.35;
+const MPV_SEEK_MAX_HOLD_MS = 800;
 
 const PlaylistItem = React.memo(({
   v, isActive, onClick, formatDuration, onMetadataLoaded 
@@ -186,10 +187,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const hideControlsTimer = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastMpvPollRef = useRef(0);
-  const mpvSeekTimerRef = useRef<number | null>(null);
-  const pendingMpvSeekRef = useRef<number | null>(null);
-  const mpvSeekHoldRef = useRef<number | null>(null);
-  const mpvSeekReleaseTimerRef = useRef<number | null>(null);
+  const mpvPendingSeekRef = useRef<number | null>(null);
+  const mpvPendingSeekTimeRef = useRef<number | null>(null);
+  const mpvPendingSeekIdRef = useRef<number | null>(null);
+  const mpvSeekRequestIdRef = useRef(0);
+  const pendingSeekPollTimerRef = useRef<number | null>(null);
+  const displayProgressRef = useRef(0);
   
   const isUserSeeking = useRef(false);
   const [displayProgress, setDisplayProgress] = useState(0);
@@ -210,7 +213,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const [mpvTime, setMpvTime] = useState<number | null>(null);
   const [mpvDuration, setMpvDuration] = useState<number | null>(null);
   const electronAPI = window.electronAPI;
-  const preferMpv = Boolean(electronAPI?.mpvInit);
+  const preferMpv = mpvController.canUse();
+  const mpvOwnerRef = useRef<string>(`player-${Math.random().toString(36).slice(2)}`);
   const [playerMode, setPlayerMode] = useState<'mpv' | 'html'>(() => (preferMpv ? 'mpv' : 'html'));
   const sidebarHideTimer = useRef<number | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -245,6 +249,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     return (saved as SortMode) || SortMode.AFTER_CURRENT;
   });
 
+  const setDisplayProgressSafe = useCallback((val: number) => {
+    if (!Number.isFinite(val)) return;
+    if (Math.abs(displayProgressRef.current - val) < 0.01) return;
+    displayProgressRef.current = val;
+    setDisplayProgress(val);
+  }, []);
+
   // Add effect to detect mobile devices and hide sidebar when playing
   useEffect(() => {
     const isMobile = window.innerWidth < 768; // Using md breakpoint as reference
@@ -269,8 +280,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   useEffect(() => {
     return () => {
       if (sidebarHideTimer.current) window.clearTimeout(sidebarHideTimer.current);
-      if (mpvSeekTimerRef.current) window.clearTimeout(mpvSeekTimerRef.current);
-      if (mpvSeekReleaseTimerRef.current) window.clearTimeout(mpvSeekReleaseTimerRef.current);
+      if (pendingSeekPollTimerRef.current) window.clearTimeout(pendingSeekPollTimerRef.current);
     };
   }, []);
 
@@ -280,28 +290,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       window.clearTimeout(deleteTimer.current);
       deleteTimer.current = null;
     }
-  }, [video.id]);
-
-  useEffect(() => {
-    if (mpvSeekTimerRef.current) {
-      window.clearTimeout(mpvSeekTimerRef.current);
-      mpvSeekTimerRef.current = null;
-    }
-    if (mpvSeekReleaseTimerRef.current) {
-      window.clearTimeout(mpvSeekReleaseTimerRef.current);
-      mpvSeekReleaseTimerRef.current = null;
-    }
-    pendingMpvSeekRef.current = null;
-    mpvSeekHoldRef.current = null;
+    mpvPendingSeekRef.current = null;
+    mpvPendingSeekTimeRef.current = null;
+    mpvPendingSeekIdRef.current = null;
     isUserSeeking.current = false;
+    if (pendingSeekPollTimerRef.current) {
+      window.clearTimeout(pendingSeekPollTimerRef.current);
+      pendingSeekPollTimerRef.current = null;
+    }
   }, [video.id]);
 
   useEffect(() => {
     setIsEnded(false);
+    displayProgressRef.current = 0;
     if (isDeleted) return;
     setIsPlaying(true);
     if (useMpv && mpvStatus === 'ready') {
-      window.electronAPI?.mpvCommand?.(['set', 'pause', 'no']);
+      mpvController.command(mpvOwnerRef.current, ['set', 'pause', 'no']);
       return;
     }
     if (videoRef.current) {
@@ -327,24 +332,72 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   }, [isPlaying]);
 
   const updateLoop = useCallback(() => {
+    // If there is a pending seek request, throttle to interval-based polling until it is acknowledged.
+    if (mpvPendingSeekIdRef.current !== null) {
+      if (pendingSeekPollTimerRef.current) {
+        window.clearTimeout(pendingSeekPollTimerRef.current);
+      }
+      if (useMpv && mpvStatus === 'ready') {
+        const now = performance.now();
+        if (now - lastMpvPollRef.current >= MPV_POLL_INTERVAL_MS) {
+          lastMpvPollRef.current = now;
+          const timeRes = mpvController.getProperty(mpvOwnerRef.current, 'time-pos', 'double');
+          const durRes = mpvController.getProperty(mpvOwnerRef.current, 'duration', 'double');
+          if (durRes?.ok && typeof durRes.value === 'number' && mpvPendingSeekRef.current !== null && durRes.value > 0) {
+            setDisplayProgressSafe((mpvPendingSeekRef.current / durRes.value) * 100);
+            const reached =
+              timeRes?.ok &&
+              typeof timeRes.value === 'number' &&
+              Math.abs(timeRes.value - mpvPendingSeekRef.current) <= MPV_SEEK_ACK_THRESHOLD;
+            const timeoutElapsed =
+              mpvPendingSeekTimeRef.current !== null &&
+              now - mpvPendingSeekTimeRef.current > MPV_SEEK_MAX_HOLD_MS;
+            if (reached || timeoutElapsed) {
+              mpvPendingSeekRef.current = null;
+              mpvPendingSeekTimeRef.current = null;
+              mpvPendingSeekIdRef.current = null;
+              isUserSeeking.current = false;
+              rafRef.current = requestAnimationFrame(updateLoop);
+              return;
+            }
+          }
+        }
+      }
+      pendingSeekPollTimerRef.current = window.setTimeout(updateLoop, MPV_POLL_INTERVAL_MS);
+      return;
+    }
+
     if (useMpv && mpvStatus === 'ready') {
       const now = performance.now();
       if (now - lastMpvPollRef.current >= MPV_POLL_INTERVAL_MS) {
         lastMpvPollRef.current = now;
-        const timeRes = electronAPI?.mpvGetProperty?.('time-pos', 'double');
-        const durRes = electronAPI?.mpvGetProperty?.('duration', 'double');
-        const pauseRes = electronAPI?.mpvGetProperty?.('pause', 'bool');
-      if (timeRes?.ok && typeof timeRes.value === 'number') {
-        setMpvTime(timeRes.value);
-          if (mpvSeekHoldRef.current !== null && Math.abs(timeRes.value - mpvSeekHoldRef.current) <= 0.3) {
-            mpvSeekHoldRef.current = null;
-            isUserSeeking.current = false;
-          }
+        const timeRes = mpvController.getProperty(mpvOwnerRef.current, 'time-pos', 'double');
+        const durRes = mpvController.getProperty(mpvOwnerRef.current, 'duration', 'double');
+        const pauseRes = mpvController.getProperty(mpvOwnerRef.current, 'pause', 'bool');
+        if (timeRes?.ok && typeof timeRes.value === 'number') {
+          setMpvTime(timeRes.value);
         }
         if (durRes?.ok && typeof durRes.value === 'number') {
           setMpvDuration(durRes.value);
-          if (!isUserSeeking.current && mpvSeekHoldRef.current === null && durRes.value > 0 && timeRes?.ok && typeof timeRes.value === 'number') {
-            setDisplayProgress((timeRes.value / durRes.value) * 100);
+          if (
+            mpvPendingSeekRef.current !== null &&
+            durRes.value > 0
+          ) {
+            const now = performance.now();
+            if (
+              mpvPendingSeekIdRef.current !== null &&
+              (
+                (timeRes?.ok && typeof timeRes.value === 'number' && Math.abs(timeRes.value - mpvPendingSeekRef.current) <= MPV_SEEK_ACK_THRESHOLD) ||
+                (mpvPendingSeekTimeRef.current !== null && now - mpvPendingSeekTimeRef.current > MPV_SEEK_MAX_HOLD_MS)
+              )
+            ) {
+              mpvPendingSeekRef.current = null;
+              mpvPendingSeekTimeRef.current = null;
+              mpvPendingSeekIdRef.current = null;
+              isUserSeeking.current = false;
+            }
+          } else if (!isUserSeeking.current && durRes.value > 0 && timeRes?.ok && typeof timeRes.value === 'number') {
+            setDisplayProgressSafe((timeRes.value / durRes.value) * 100);
           }
           if (durRes.value > 0 && timeRes?.ok && typeof timeRes.value === 'number') {
             const ended = timeRes.value >= durRes.value - 0.2;
@@ -359,11 +412,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     } else {
       const v = videoRef.current;
       if (v && !isUserSeeking.current && v.duration > 0 && isFinite(v.duration)) {
-        setDisplayProgress((v.currentTime / v.duration) * 100);
+        setDisplayProgressSafe((v.currentTime / v.duration) * 100);
       }
     }
     rafRef.current = requestAnimationFrame(updateLoop);
-  }, [useMpv, mpvStatus, electronAPI]);
+  }, [useMpv, mpvStatus, setDisplayProgressSafe]);
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(updateLoop);
@@ -392,13 +445,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     if (useMpv) {
       if (mpvStatus !== 'ready') return;
       if (isEnded) {
-        window.electronAPI?.mpvCommand?.(['seek', '0', 'absolute', 'keyframes']);
-        window.electronAPI?.mpvCommand?.(['set', 'pause', 'no']);
+        mpvController.command(mpvOwnerRef.current, ['seek', '0', 'absolute', 'keyframes']);
+        mpvController.command(mpvOwnerRef.current, ['set', 'pause', 'no']);
         setIsEnded(false);
         setIsPlaying(true);
         return;
       }
-      window.electronAPI?.mpvCommand?.(['cycle', 'pause']);
+      mpvController.command(mpvOwnerRef.current, ['cycle', 'pause']);
       setIsPlaying(prev => !prev);
       return;
     }
@@ -422,43 +475,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const handleProgressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     isUserSeeking.current = true;
-    setDisplayProgress(val);
+    setDisplayProgressSafe(val);
     if (useMpv) {
       if (mpvDuration && mpvDuration > 0) {
         const target = (val / 100) * mpvDuration;
         if (isEnded) {
           setIsEnded(false);
           setIsPlaying(true);
-          electronAPI?.mpvCommand?.(['set', 'pause', 'no']);
+          mpvController.command(mpvOwnerRef.current, ['set', 'pause', 'no']);
         }
-        isUserSeeking.current = true;
-        pendingMpvSeekRef.current = target;
-        if (mpvSeekTimerRef.current) {
-          window.clearTimeout(mpvSeekTimerRef.current);
-        }
-        mpvSeekTimerRef.current = window.setTimeout(() => {
-          const pendingTarget = pendingMpvSeekRef.current;
-          if (pendingTarget !== null) {
-            electronAPI?.mpvCommand?.([
-              'seek',
-              pendingTarget.toString(),
-              'absolute',
-              'keyframes'
-            ]);
-            mpvSeekHoldRef.current = pendingTarget;
-            pendingMpvSeekRef.current = null;
-            if (mpvSeekReleaseTimerRef.current) {
-              window.clearTimeout(mpvSeekReleaseTimerRef.current);
-            }
-            mpvSeekReleaseTimerRef.current = window.setTimeout(() => {
-              if (mpvSeekHoldRef.current === pendingTarget) {
-                mpvSeekHoldRef.current = null;
-                isUserSeeking.current = false;
-              }
-            }, MPV_SEEK_HOLD_TIMEOUT_MS);
-          }
-          mpvSeekTimerRef.current = null;
-        }, MPV_SEEK_DEBOUNCE_MS);
+        mpvPendingSeekRef.current = target;
+        mpvSeekRequestIdRef.current += 1;
+        mpvPendingSeekIdRef.current = mpvSeekRequestIdRef.current;
+        mpvPendingSeekTimeRef.current = performance.now();
+        mpvController.command(mpvOwnerRef.current, [
+          'seek',
+          target.toString(),
+          'absolute',
+          'keyframes'
+        ]);
       }
       return;
     }
@@ -480,7 +515,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     if (useMpv) {
       if (mpvStatus !== 'ready') return;
       const next = !isMuted;
-      window.electronAPI?.mpvCommand?.(['set', 'mute', next ? 'yes' : 'no']);
+      mpvController.command(mpvOwnerRef.current, ['set', 'mute', next ? 'yes' : 'no']);
       setIsMuted(next);
       return;
     }
@@ -490,7 +525,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const seek = useCallback((seconds: number) => {
     if (useMpv) {
       if (mpvStatus !== 'ready') return;
-      window.electronAPI?.mpvCommand?.(['seek', seconds.toString(), 'relative']);
+      mpvController.command(mpvOwnerRef.current, ['seek', seconds.toString(), 'relative']);
       return;
     }
     if (videoRef.current && isFinite(videoRef.current.duration)) {
@@ -504,7 +539,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       if (newVal > 0) setIsMuted(false);
       if (useMpv && mpvStatus === 'ready') {
         const mpvVolume = Math.round(newVal * 100);
-        window.electronAPI?.mpvCommand?.(['set', 'volume', mpvVolume.toString()]);
+        mpvController.command(mpvOwnerRef.current, ['set', 'volume', mpvVolume.toString()]);
       }
       return newVal;
     });
@@ -546,6 +581,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       setMpvStatus('idle');
       setMpvError(null);
       setMpvDebug(null);
+      mpvController.release(mpvOwnerRef.current);
       return;
     }
     if (isDeleted) {
@@ -553,18 +589,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       setMpvStatus('idle');
       setMpvError(null);
       setMpvDebug(null);
-      window.electronAPI?.mpvStop?.();
+      mpvController.release(mpvOwnerRef.current);
       return;
     }
     if (!preferMpv) {
       setUseMpv(true);
       setMpvStatus('error');
       setMpvError('addon_missing');
-      const debug = electronAPI?.mpvDebug?.();
-      if (debug) {
-        setMpvDebug(`addon=${debug.addonPath || 'none'} err=${debug.addonError || 'none'} lib=${debug.libPath || 'none'}`);
-      }
-      console.warn('[mpv] missing addon', debug);
+      setMpvDebug(mpvController.getDebugString());
+      console.warn('[mpv] missing addon', mpvController.getDebugString());
       return;
     }
     if (!video.path) {
@@ -576,51 +609,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       return;
     }
     setUseMpv(true);
-    const initResult = electronAPI?.mpvInit?.();
+    const initResult = mpvController.acquire(mpvOwnerRef.current, video.path, { force: true });
     if (!initResult?.ok) {
       setUseMpv(true);
       setMpvStatus('error');
       setMpvError(initResult?.error || 'init_failed');
-      const debug = electronAPI?.mpvDebug?.();
-      if (debug) {
-        setMpvDebug(`addon=${debug.addonPath || 'none'} err=${debug.addonError || 'none'} lib=${debug.libPath || 'none'}`);
-      } else {
-        setMpvDebug(null);
-      }
-      console.warn('[mpv] init failed', initResult, debug);
-      return;
-    }
-    const loadResult = electronAPI?.mpvLoad?.(video.path);
-    if (!loadResult?.ok) {
-      setUseMpv(true);
-      setMpvStatus('error');
-      setMpvError(loadResult?.error || 'load_failed');
-      const debug = electronAPI?.mpvDebug?.();
-      if (debug) {
-        setMpvDebug(`addon=${debug.addonPath || 'none'} err=${debug.addonError || 'none'} lib=${debug.libPath || 'none'}`);
-      } else {
-        setMpvDebug(null);
-      }
-      console.warn('[mpv] load failed', loadResult, debug);
+      setMpvDebug(initResult.debug || mpvController.getDebugString());
+      console.warn('[mpv] init/load failed', initResult);
       return;
     }
     setIsMuted(false);
     setVolume(1);
-    electronAPI?.mpvCommand?.(['set', 'volume', '100']);
-    electronAPI?.mpvCommand?.(['set', 'mute', 'no']);
+    mpvController.command(mpvOwnerRef.current, ['set', 'volume', '100']);
+    mpvController.command(mpvOwnerRef.current, ['set', 'mute', 'no']);
     setUseMpv(true);
     setIsPlaying(true);
     setMpvStatus('ready');
     setMpvError(null);
     setMpvDebug(null);
     return () => {
-      window.electronAPI?.mpvStop?.();
+      mpvController.release(mpvOwnerRef.current);
     };
   }, [video.id, video.path, preferMpv, playerMode, isDeleted]);
 
   useEffect(() => {
     if (playerMode === 'html' || isDeleted) {
-      window.electronAPI?.mpvStop?.();
+      mpvController.release(mpvOwnerRef.current);
     }
   }, [playerMode, isDeleted]);
 
@@ -641,7 +655,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       if (canvas.width !== width) canvas.width = width;
       if (canvas.height !== height) canvas.height = height;
 
-      const result = window.electronAPI?.mpvRenderFrame?.(width, height);
+      const result = mpvController.renderFrame(mpvOwnerRef.current, width, height);
       if (result?.ok && result.frame && result.frame.length === width * height * 4) {
         if (!imageData || imageData.width !== width || imageData.height !== height) {
           imageData = new ImageData(new Uint8ClampedArray(width * height * 4), width, height);
@@ -867,9 +881,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
                 value={displayProgress} 
                 onMouseDown={() => { isUserSeeking.current = true; }}
                 onMouseUp={(e) => { 
-                  if (!useMpv || (pendingMpvSeekRef.current === null && mpvSeekHoldRef.current === null)) {
-                    isUserSeeking.current = false; 
-                  }
+                  // Always release the local seeking flag; pending seek state still freezes progress until ack.
+                  isUserSeeking.current = false; 
                   resetHideTimer(true); 
                   (e.target as HTMLInputElement).blur();
                 }}
@@ -910,8 +923,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
                       setIsMuted(false);
                       if (useMpv && mpvStatus === 'ready') {
                         const mpvVolume = Math.round(next * 100);
-                        window.electronAPI?.mpvCommand?.(['set', 'volume', mpvVolume.toString()]);
-                        window.electronAPI?.mpvCommand?.(['set', 'mute', next === 0 ? 'yes' : 'no']);
+                        mpvController.command(mpvOwnerRef.current, ['set', 'volume', mpvVolume.toString()]);
+                        mpvController.command(mpvOwnerRef.current, ['set', 'mute', next === 0 ? 'yes' : 'no']);
                       }
                       resetHideTimer(true);
                     }} 

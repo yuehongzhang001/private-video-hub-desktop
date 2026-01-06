@@ -1,8 +1,9 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { VideoItem } from '../types';
-import { PREVIEW_DELAY } from '../constants';
+import { PREVIEW_DELAY, HTML_VIDEO_PREVIEW_EXTENSIONS } from '../constants';
 import { thumbnailService } from '../services/ThumbnailService';
+import { mpvController } from '../services/MpvController';
 
 interface VideoCardProps {
   video: VideoItem;
@@ -21,6 +22,10 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
   const cardRef = useRef<HTMLDivElement>(null);
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const isPreviewScrubbing = useRef(false);
+  const mpvCanvasRef = useRef<HTMLCanvasElement>(null);
+  const mpvPreviewRafRef = useRef<number | null>(null);
+  const mpvPreviewPollRef = useRef<number | null>(null);
+  const mpvOwnerRef = useRef<string>(`grid-preview-${video.id}-${Math.random().toString(36).slice(2)}`);
 
   useEffect(() => {
     if (video.thumbnail) return;
@@ -40,6 +45,18 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
     if (cardRef.current) observer.observe(cardRef.current);
     return () => observer.disconnect();
   }, [video.id, video.thumbnail, video.url, onMetadataLoaded]);
+
+  const stopMpvPreview = useCallback(() => {
+    if (mpvPreviewRafRef.current) {
+      cancelAnimationFrame(mpvPreviewRafRef.current);
+      mpvPreviewRafRef.current = null;
+    }
+    if (mpvPreviewPollRef.current) {
+      window.clearInterval(mpvPreviewPollRef.current);
+      mpvPreviewPollRef.current = null;
+    }
+    mpvController.release(mpvOwnerRef.current);
+  }, []);
 
   const handleMouseEnter = () => {
     setIsHovered(true);
@@ -62,6 +79,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       clearTimeout(hoverTimer.current);
       hoverTimer.current = null;
     }
+    stopMpvPreview();
   };
 
   const formatDuration = (seconds?: number) => {
@@ -81,14 +99,27 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
   };
 
   const videoExt = useMemo(() => getExtension(video.name || video.path), [video.name, video.path]);
+  const getExtensionKey = (value?: string) => {
+    if (!value) return '';
+    const lastSegment = value.split(/[\\/]/).pop() || value;
+    const dotIndex = lastSegment.lastIndexOf('.');
+    if (dotIndex <= 0 || dotIndex === lastSegment.length - 1) return '';
+    return lastSegment.slice(dotIndex).toLowerCase();
+  };
+  const videoExtKey = useMemo(() => getExtensionKey(video.name || video.path), [video.name, video.path]);
+  const preferMpvPreview = useMemo(
+    () => !HTML_VIDEO_PREVIEW_EXTENSIONS.has(videoExtKey) && mpvController.canUse() && Boolean(video.path),
+    [videoExtKey, video.path]
+  );
 
   const previewUrl = useMemo(() => {
-    if (!isHovered) return "";
+    if (!isHovered || preferMpvPreview) return "";
     const startTime = (video.duration !== undefined && video.duration < 15) ? 1 : 10;
     return `${video.url}#t=${startTime}`;
-  }, [video.url, video.duration, isHovered]);
+  }, [video.url, video.duration, isHovered, preferMpvPreview]);
 
   const handlePreviewLoadedMetadata = () => {
+    if (preferMpvPreview) return;
     const el = previewVideoRef.current;
     if (el && isFinite(el.duration)) {
       setPreviewDuration(el.duration);
@@ -96,7 +127,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
   };
 
   const handlePreviewTimeUpdate = () => {
-    if (isPreviewScrubbing.current) return;
+    if (isPreviewScrubbing.current || preferMpvPreview) return;
     const el = previewVideoRef.current;
     if (!el || !isFinite(el.duration) || el.duration <= 0) return;
     setPreviewProgress((el.currentTime / el.duration) * 100);
@@ -105,11 +136,98 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
   const handlePreviewSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseFloat(e.target.value);
     setPreviewProgress(val);
+    if (preferMpvPreview) {
+      if (previewDuration && previewDuration > 0) {
+        const target = (val / 100) * previewDuration;
+        mpvController.command(mpvOwnerRef.current, ['seek', target.toString(), 'absolute', 'keyframes']);
+      }
+      return;
+    }
     const el = previewVideoRef.current;
     if (el && isFinite(el.duration) && el.duration > 0) {
       el.currentTime = (val / 100) * el.duration;
     }
   };
+
+  useEffect(() => {
+    if (!preferMpvPreview || !showPreview || !video.path) {
+      stopMpvPreview();
+      return;
+    }
+
+    const acquireResult = mpvController.acquire(mpvOwnerRef.current, video.path, { force: false });
+    if (!acquireResult.ok) {
+      setPreviewReady(false);
+      return () => stopMpvPreview();
+    }
+
+    mpvController.command(mpvOwnerRef.current, ['set', 'mute', 'yes']);
+    mpvController.command(mpvOwnerRef.current, ['set', 'pause', 'no']);
+
+    const canvas = mpvCanvasRef.current;
+    const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+    if (!canvas || !ctx) {
+      stopMpvPreview();
+      return;
+    }
+
+    let imageData: ImageData | null = null;
+    const render = () => {
+      const rect = canvas.getBoundingClientRect();
+      const width = Math.max(1, Math.floor(rect.width));
+      const height = Math.max(1, Math.floor(rect.height));
+      if (canvas.width !== width) canvas.width = width;
+      if (canvas.height !== height) canvas.height = height;
+
+      const result = mpvController.renderFrame(mpvOwnerRef.current, width, height);
+      if (result?.ok && result.frame && result.frame.length === width * height * 4) {
+        if (!imageData || imageData.width !== width || imageData.height !== height) {
+          imageData = new ImageData(new Uint8ClampedArray(width * height * 4), width, height);
+        }
+        imageData.data.set(result.frame);
+        ctx.putImageData(imageData, 0, 0);
+        setPreviewReady(true);
+      }
+
+      mpvPreviewRafRef.current = requestAnimationFrame(render);
+    };
+
+    mpvPreviewRafRef.current = requestAnimationFrame(render);
+    mpvPreviewPollRef.current = window.setInterval(() => {
+      const durationRes = mpvController.getProperty(mpvOwnerRef.current, 'duration', 'double');
+      if (durationRes?.ok && typeof durationRes.value === 'number' && durationRes.value > 0) {
+        setPreviewDuration(durationRes.value);
+      }
+      const timeRes = mpvController.getProperty(mpvOwnerRef.current, 'time-pos', 'double');
+      if (
+        !isPreviewScrubbing.current &&
+        durationRes?.ok &&
+        typeof durationRes.value === 'number' &&
+        durationRes.value > 0 &&
+        timeRes?.ok &&
+        typeof timeRes.value === 'number'
+      ) {
+        setPreviewProgress((timeRes.value / durationRes.value) * 100);
+      }
+    }, 200);
+
+    return () => {
+      stopMpvPreview();
+      setPreviewReady(false);
+    };
+  }, [preferMpvPreview, showPreview, video.path, stopMpvPreview]);
+
+  useEffect(() => () => stopMpvPreview(), [stopMpvPreview]);
+
+  const handleCardClick = useCallback(() => {
+    if (preferMpvPreview) {
+      // Ensure playback state is reset before entering the player page.
+      mpvController.command(mpvOwnerRef.current, ['seek', '0', 'absolute', 'keyframes']);
+      mpvController.command(mpvOwnerRef.current, ['set', 'pause', 'yes']);
+      stopMpvPreview();
+    }
+    onClick(video);
+  }, [preferMpvPreview, stopMpvPreview, onClick, video]);
 
   return (
     <div 
@@ -122,7 +240,7 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
       className="group relative flex flex-col bg-zinc-900 rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl hover:shadow-black/60 border border-zinc-800 hover:border-indigo-500/50"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      onClick={() => onClick(video)}
+      onClick={handleCardClick}
     >
       <div className="relative bg-black overflow-hidden" style={{ aspectRatio: '16 / 9' }}>
         {video.thumbnail ? (
@@ -151,7 +269,14 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
           </div>
         )}
 
-        {isHovered && previewUrl && (
+        {isHovered && preferMpvPreview && (
+          <canvas
+            ref={mpvCanvasRef}
+            className={`absolute inset-0 w-full h-full object-contain bg-black transition-opacity duration-700 z-10 ${(showPreview && previewReady) ? 'opacity-100' : 'opacity-0'}`}
+          />
+        )}
+
+        {isHovered && !preferMpvPreview && previewUrl && (
           <video
             ref={previewVideoRef}
             src={previewUrl}
