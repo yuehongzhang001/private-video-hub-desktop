@@ -137,6 +137,21 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    if (!mainWindow) return;
+    const template: Electron.MenuItemConstructorOptions[] = [
+      { role: 'undo', enabled: params.editFlags.canUndo },
+      { role: 'redo', enabled: params.editFlags.canRedo },
+      { type: 'separator' },
+      { role: 'cut', enabled: params.editFlags.canCut },
+      { role: 'copy', enabled: params.editFlags.canCopy },
+      { role: 'paste', enabled: params.editFlags.canPaste },
+      { type: 'separator' },
+      { role: 'selectAll', enabled: params.editFlags.canSelectAll }
+    ];
+    Menu.buildFromTemplate(template).popup({ window: mainWindow });
+  });
+
   return mainWindow;
 }
 
