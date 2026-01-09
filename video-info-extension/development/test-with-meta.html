@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>完整测试页面 - 带 Meta 标签 | 视频网站</title>
+
+    <!-- Open Graph meta tags -->
+    <meta property="og:title" content="高级 Python 编程教程">
+    <meta property="og:image" content="https://example.com/og-image.jpg">
+    <meta property="og:video:duration" content="1800">
+    <meta property="og:site_name" content="视频网站">
+
+    <!-- Twitter Card meta tags -->
+    <meta name="twitter:title" content="高级 Python 编程">
+    <meta name="twitter:image" content="https://example.com/twitter-image.jpg">
+
+    <!-- JSON-LD (should be lower priority than meta tags) -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "VideoObject",
+        "name": "JSON-LD 标题",
+        "thumbnailUrl": "https://example.com/jsonld-thumbnail.jpg",
+        "duration": "PT20M"
+    }
+    </script>
+</head>
+
+<body>
+    <h1>完整测试页面</h1>
+    <p>这个页面包含 meta 标签和 JSON-LD，用于测试优先级系统。</p>
+
+    <h2>预期结果</h2>
+    <ul>
+        <li><strong>标题</strong>: "高级 Python 编程教程" (来自 og:title，优先级高于 JSON-LD)</li>
+        <li><strong>缩略图</strong>: "https://example.com/og-image.jpg" (来自 og:image)</li>
+        <li><strong>时长</strong>: "30:00" (来自 og:video:duration，1800秒 = 30分钟)</li>
+    </ul>
+</body>
+
+</html>

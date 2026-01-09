@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试 - 广告后播放正片</title>
+    <style>
+        .status {
+            padding: 10px;
+            background: #f0f0f0;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .log {
+            font-family: monospace;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>模拟广告流测试</h1>
+    <p>此页面模拟：加载时有封面 -> 播放5秒广告 -> 切换正片（移除封面，时长变长）。</p>
+
+    <div class="video-container">
+        <!-- 初始状态：有封面，指向广告视频 -->
+        <video id="mainPlayer" width="640" height="360" controls poster="https://example.com/movie-cover.jpg"
+            src="https://example.com/ad.mp4">
+        </video>
+    </div>
+
+    <div class="status">
+        <h3>当前状态：</h3>
+        <div id="statusLog"></div>
+    </div>
+
+    <button onclick="startSimulation()">开始模拟播放流程</button>
+
+    <script>
+        const video = document.getElementById('mainPlayer');
+        const logDiv = document.getElementById('statusLog');
+
+        function log(msg) {
+            logDiv.innerHTML += `<div class="log">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+        }
+
+        // 模拟广告时长的 metadata
+        // 我们通过修改 duration 属性来模拟（实际 video 标签是只读的，但在 DOM 中我们可以 hack 或者设置 data-duration）
+        // 这里为了让 content.js 检测到，我们直接修改 video 对象（模拟加载了新资源）
+
+        function startSimulation() {
+            log("1. 初始状态：显示封面，准备播放广告 (时长 15s)");
+            // 模拟广告时长
+            Object.defineProperty(video, 'duration', { value: 15, configurable: true });
+            video.dispatchEvent(new Event('loadedmetadata'));
+
+            setTimeout(() => {
+                log("2. 广告播放中... (5秒后切换正片)");
+            }, 1000);
+
+            setTimeout(() => {
+                log("3. 广告结束，切换正片！");
+
+                // 模拟切换正片：
+                // 1. 移除封面 (poster)
+                video.removeAttribute('poster');
+
+                // 2. 时长变为正片时长 (比如 45分钟 = 2700秒)
+                Object.defineProperty(video, 'duration', { value: 2700, configurable: true });
+
+                // 3. 触发事件让 content.js 感知
+                video.src = "https://example.com/movie.mp4"; // src 变化
+                video.dispatchEvent(new Event('durationchange'));
+                video.dispatchEvent(new Event('loadedmetadata'));
+
+                log("   - 封面已移除");
+                log("   - 时长已更新为 45:00");
+                log("   >>> 此时扩展应保留原封面，并更新时长！");
+            }, 6000);
+        }
+    </script>
+</body>
+
+</html>

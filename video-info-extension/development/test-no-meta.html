@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试视频页面 - 学习编程 | 教育网站</title>
+
+    <!-- Test case: No meta tags, only title and JSON-LD -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "VideoObject",
+        "name": "JavaScript 基础教程",
+        "description": "学习 JavaScript 编程基础",
+        "thumbnailUrl": "https://example.com/thumbnail.jpg",
+        "duration": "PT15M30S",
+        "uploadDate": "2024-01-01"
+    }
+    </script>
+</head>
+
+<body>
+    <h1>视频测试页面</h1>
+    <p>这个页面用于测试视频信息提取功能，特别是当 meta 标签缺失时的情况。</p>
+
+    <div class="video-container">
+        <video poster="https://example.com/poster.jpg" controls>
+            <source src="video.mp4" type="video/mp4">
+        </video>
+    </div>
+
+    <h2>测试场景</h2>
+    <ul>
+        <li><strong>标题提取</strong>: 应该从 JSON-LD 中提取 "JavaScript 基础教程"，而不是完整的页面标题</li>
+        <li><strong>缩略图提取</strong>: 应该从 JSON-LD 中提取缩略图 URL</li>
+        <li><strong>时长提取</strong>: 应该解析 ISO 8601 格式 (PT15M30S) 为 15:30</li>
+    </ul>
+</body>
+
+</html>

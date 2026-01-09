@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抖音风格测试 - 自定义 Meta 标签</title>
+
+    <!-- Custom meta tag similar to Douyin/TikTok -->
+    <meta name="lark:url:video_cover_image_url"
+        content="https://p3-pc-sign.douyinpic.com/image-cut-tos-priv/dfde94b57757e525696934441e959e68~tplv-dy-resize-origshort-autoq-75:330.jpeg?biz_tag=pcweb_cover&amp;from=327834062&amp;lk3s=138a59ce&amp;s=PackSourceEnum_AWEME_DETAIL&amp;sc=cover&amp;se=false&amp;x-expires=2082942000&amp;x-signature=UpINadlfIt9GJUsqOWOtjH9jyWI%3D"
+        data-rh="true">
+
+    <!-- Other custom patterns to test -->
+    <meta name="video_poster_url" content="https://example.com/poster.jpg">
+    <meta name="cover_url" content="https://example.com/cover.jpg">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "VideoObject",
+        "name": "抖音短视频测试",
+        "description": "测试自定义 meta 标签提取",
+        "duration": "PT45S"
+    }
+    </script>
+</head>
+
+<body>
+    <h1>自定义 Meta 标签测试</h1>
+    <p>这个页面测试从自定义 meta 标签中提取封面图。</p>
+
+    <h2>测试的 Meta 标签</h2>
+    <ul>
+        <li><code>lark:url:video_cover_image_url</code> - 抖音风格的封面图 URL (87分)</li>
+        <li><code>video_poster_url</code> - 视频海报 URL (86分)</li>
+        <li><code>cover_url</code> - 封面 URL (84分)</li>
+    </ul>
+
+    <h2>预期结果</h2>
+    <p><strong>封面图</strong>: 应该提取 <code>lark:url:video_cover_image_url</code> 的值（得分最高：87分）</p>
+    <p><strong>标题</strong>: "抖音短视频测试" (来自 JSON-LD)</p>
+    <p><strong>时长</strong>: "0:45" (来自 JSON-LD，PT45S 格式)</p>
+</body>
+
+</html>

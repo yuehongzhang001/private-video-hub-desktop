@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Info Parser</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+  <div class="container">
+    <header class="header"
+      style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <div>
+        <h1 class="title" style="margin: 0; font-size: 18px;">🎬 Video Info Parser</h1>
+        <p class="subtitle" style="margin: 5px 0 0 0; opacity: 0.8; font-size: 12px;">当前页面视频信息</p>
+      </div>
+      <button id="refresh-btn" class="btn-icon"
+        style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 5px;" title="重新扫描">🔄</button>
+    </header>
+
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <p>正在分析页面...</p>
+    </div>
+
+    <div id="error" class="error hidden">
+      <p>❌ 无法分析当前页面</p>
+    </div>
+
+    <div id="empty" class="empty hidden">
+      <div class="empty-icon">📹</div>
+      <p>当前页面未检测到视频</p>
+    </div>
+
+    <div id="results" class="results hidden">
+      <!-- Video candidates will be inserted here -->
+    </div>
+
+    <div id="images-section" class="images-section hidden">
+      <button id="toggle-images" class="btn btn-tertiary images-toggle" aria-expanded="false" type="button">
+        查看更多候选图片
+        <span class="chevron">▾</span>
+      </button>
+      <div id="image-list" class="image-list hidden"></div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+
+</html>
