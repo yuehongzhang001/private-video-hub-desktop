@@ -154,6 +154,11 @@ try {
     }),
     favoritesFetchMeta: (url: string) => ipcRenderer.invoke('favorites:fetchMeta', url),
     favoritesImportCover: (sourcePath: string) => ipcRenderer.invoke('favorites:importCover', sourcePath),
+    onFavoritesImport: (handler: (payload: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => handler(payload);
+      ipcRenderer.on('favorites:nativeImport', listener);
+      return () => ipcRenderer.removeListener('favorites:nativeImport', listener);
+    },
     // 可以在这里添加更多的 API
   });
 

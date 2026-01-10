@@ -5,7 +5,8 @@
   "description": "Parse and extract video metadata (title, URL, duration, thumbnail) from web pages",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "nativeMessaging"
   ],
   "action": {
     "default_popup": "popup/popup.html",

@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import { createThumbnail } from './ffmpeg.js';
 import { fetchFavoritesMeta } from './favoritesMeta.js';
+import { DEFAULT_NATIVE_MESSAGING_PORT, startNativeFavoritesServer } from './nativeMessagingServer.js';
 
 type LogLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
 
@@ -73,6 +74,16 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let nativeFavoritesServer: { close: () => void } | null = null;
+const pendingNativeFavorites: unknown[] = [];
+
+const dispatchNativeFavorites = (payload: unknown) => {
+  if (mainWindow?.webContents) {
+    mainWindow.webContents.send('favorites:nativeImport', payload);
+  } else {
+    pendingNativeFavorites.push(payload);
+  }
+};
 
 function createWindow() {
   // 获取当前文件的目录路径
@@ -125,6 +136,11 @@ function createWindow() {
     mainWindow?.webContents.executeJavaScript('window.electronAPI ? "yes" : "no"')
       .then(result => console.log('[preload] electronAPI:', result))
       .catch(err => console.error('[preload] check failed:', err));
+    if (pendingNativeFavorites.length && mainWindow?.webContents) {
+      pendingNativeFavorites.splice(0).forEach((payload) => {
+        mainWindow?.webContents.send('favorites:nativeImport', payload);
+      });
+    }
   });
 
   if (rendererLogPath) {
@@ -176,6 +192,9 @@ app.whenReady().then(() => {
     });
 
   createWindow();
+  const nativePort = Number(process.env.VHUB_NATIVE_PORT) || DEFAULT_NATIVE_MESSAGING_PORT;
+  nativeFavoritesServer = startNativeFavoritesServer(dispatchNativeFavorites, nativePort);
+  console.log('[native-messaging] server listening on', nativePort);
 
   // 移除默认菜单栏
   Menu.setApplicationMenu(null);
@@ -292,6 +311,13 @@ function createMenu() {
 }
 
 // 所有窗口关闭时退出应用（macOS 除外）
+app.on('before-quit', () => {
+  if (nativeFavoritesServer) {
+    nativeFavoritesServer.close();
+    nativeFavoritesServer = null;
+  }
+});
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();

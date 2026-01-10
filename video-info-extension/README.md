@@ -9,6 +9,7 @@
 - 🎯 **智能优先级**：根据数据来源自动排序，优先显示最可靠的结果
 - 💎 **现代UI**：采用深色主题和玻璃态设计的精美界面
 - 📋 **一键复制**：快速复制视频信息为JSON格式
+- 🔌 **直达应用**：通过 Native Messaging 直接发送到桌面端收藏夹
 
 ## 提取的信息
 
@@ -39,7 +40,8 @@
 2. 点击浏览器工具栏中的扩展图标
 3. 扩展会自动分析当前页面并显示检测到的视频信息
 4. 点击"复制JSON"按钮可将视频信息复制到剪贴板
-5. 点击"打开链接"可在新标签页中打开视频URL
+5. 点击"发送到应用"可直接加入桌面端收藏夹
+6. 点击"打开链接"可在新标签页中打开视频URL
 
 ## 项目结构
 
@@ -84,8 +86,26 @@ video-info-parser/
 
 - `activeTab`：访问当前激活标签页的内容
 - `scripting`：注入内容脚本以分析页面
+- `nativeMessaging`：将视频信息发送到本地桌面应用
 
 **隐私保护**：所有数据分析都在本地进行，不会发送到任何外部服务器。
+
+## Native Messaging 设置 (桌面端直达)
+
+本扩展通过 Native Messaging 与桌面端应用通信。需要在系统中注册 native host。
+
+### Windows 示例
+
+1. 复制 `native/native-messaging-host.json` 并按需修改：
+   - `path` 指向本机 `node.exe`
+   - `args[0]` 指向本项目里的 `native/native-messaging-host.js`
+   - `allowed_origins` 替换为扩展 ID
+2. 将 manifest 注册到：
+   `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.private_video_hub.desktop`
+   值为 manifest 文件的完整路径
+3. 确保桌面端应用已启动
+
+> 端口默认为 `127.0.0.1:32145`，可通过环境变量 `VHUB_NATIVE_PORT` 调整。
 
 ## 兼容性
 

@@ -483,10 +483,12 @@ function extractDurationCandidates() {
     // Elements with class/id containing 'duration', 'time', 'length'
     const potentialDurationEls = document.querySelectorAll('[class*="duration"], [class*="time"], [class*="length"], [id*="duration"], [id*="time"]');
     potentialDurationEls.forEach(el => {
+        const rawText = typeof el.innerText === 'string' ? el.innerText : '';
+        if (!rawText) return;
         // Skip if too large (likely a container, not a label)
-        if (el.innerText.length > 20) return;
+        if (rawText.length > 20) return;
 
-        const text = normalizeText(el.innerText);
+        const text = normalizeText(rawText);
         // Strict time match: MM:SS or HH:MM:SS
         const timeMatch = text.match(/^(\d+(?::\d+){1,2})$/);
         if (timeMatch) {

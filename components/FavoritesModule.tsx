@@ -1,20 +1,13 @@
 import * as React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TranslationBundle } from '../translations';
-
-type FavoriteItem = {
-  id: string;
-  title: string;
-  url: string;
-  duration?: string;
-  note?: string;
-  siteName?: string;
-  siteIconUrl?: string;
-  thumbnailUrl?: string;
-  thumbnailDataUrl?: string;
-  createdAt: number;
-  lastAccessedAt?: number;
-};
+import {
+  FAVORITES_STORAGE_KEY,
+  normalizeFavorite,
+  normalizeIncomingFavorites,
+  parseFavorites,
+  type FavoriteItem
+} from '../services/favoritesNormalization';
 
 type SortMode = 'recent' | 'accessed';
 type ColumnsMode = 4 | 5;
@@ -30,7 +23,6 @@ type FormState = {
   thumbnailDataUrl: string;
 };
 
-const FAVORITES_STORAGE_KEY = 'vhub-favorites';
 const FAVORITES_COLUMNS_KEY = 'vhub-favorites-columns';
 const FAVORITES_SORT_KEY = 'vhub-favorites-sort';
 const FAVORITES_PAGE_SIZE = 20;
@@ -46,19 +38,6 @@ const emptyForm: FormState = {
   thumbnailDataUrl: ''
 };
 
-const parseFavorites = (raw: string | null): FavoriteItem[] => {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    const list = Array.isArray(parsed) ? parsed : [parsed];
-    return list
-      .map((item) => normalizeFavorite(item))
-      .filter((item): item is FavoriteItem => Boolean(item));
-  } catch {
-    return [];
-  }
-};
-
 const sanitizeJsonInput = (raw: string) => {
   const trimmed = raw.trim().replace(/^\uFEFF/, '');
   const withoutFences = trimmed
@@ -66,63 +45,6 @@ const sanitizeJsonInput = (raw: string) => {
     .replace(/```$/i, '')
     .trim();
   return withoutFences.replace(/,\s*([}\]])/g, '$1');
-};
-
-const getFallbackTitle = (rawUrl: string) => {
-  if (!rawUrl) return 'Untitled';
-  const clean = rawUrl.split('#')[0];
-  const withoutQuery = clean.split('?')[0];
-  const trimmed = withoutQuery.replace(/\/+$/, '');
-  const last = trimmed.split('/').pop() || trimmed;
-  return last || 'Untitled';
-};
-
-const getSiteNameFromUrl = (rawUrl: string) => {
-  if (!rawUrl) return '';
-  try {
-    const hostname = new URL(rawUrl).hostname;
-    const trimmed = hostname.replace(/^www\./i, '');
-    return trimmed;
-  } catch {
-    return '';
-  }
-};
-
-const normalizeFavorite = (item: any): FavoriteItem | null => {
-  if (!item || typeof item !== 'object') return null;
-  const url = String(item.url ?? item.link ?? item.href ?? '').trim();
-  if (!url) return null;
-  const titleRaw = item.title ?? item.name;
-  const title =
-    titleRaw != null && String(titleRaw).trim()
-      ? String(titleRaw).trim()
-      : getFallbackTitle(url);
-
-  const createdAt = typeof item.createdAt === 'number' ? item.createdAt : Date.now();
-  const lastAccessedAt = typeof item.lastAccessedAt === 'number' ? item.lastAccessedAt : undefined;
-  const duration = item.duration != null ? String(item.duration).trim() : '';
-  const note = item.note != null ? String(item.note).trim() : '';
-  const siteName = item.siteName ?? item.site ?? item.site_name ?? item.siteTitle ?? '';
-  const siteIconUrl = item.siteIconUrl ?? item.siteIcon ?? item.icon ?? item.favicon ?? '';
-  const siteNameText = siteName != null ? String(siteName).trim() : '';
-  const derivedSiteName = siteNameText || getSiteNameFromUrl(url);
-  const siteIconText = siteIconUrl != null ? String(siteIconUrl).trim() : '';
-  const thumbnailUrl = item.thumbnailUrl != null ? String(item.thumbnailUrl).trim() : '';
-  const thumbnailDataUrl = item.thumbnailDataUrl != null ? String(item.thumbnailDataUrl).trim() : '';
-
-  return {
-    id: String(item.id ?? `fav-${createdAt}-${Math.random().toString(16).slice(2)}`),
-    title,
-    url,
-    duration: duration || undefined,
-    note: note || undefined,
-    siteName: derivedSiteName || undefined,
-    siteIconUrl: siteIconText || undefined,
-    thumbnailUrl: thumbnailUrl || undefined,
-    thumbnailDataUrl: thumbnailDataUrl || undefined,
-    createdAt,
-    lastAccessedAt
-  };
 };
 
 const useLocalStorageState = <T,>(key: string, fallback: T, parse?: (raw: string | null) => T) => {
@@ -440,6 +362,21 @@ export const FavoritesModule: React.FC<{
       handleOpenAdd();
     }
   }, [openAddSignal, handleOpenAdd]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onFavoritesImport) return;
+    const cleanup = window.electronAPI.onFavoritesImport((payload) => {
+      const incoming = normalizeIncomingFavorites(payload);
+      if (!incoming.length) return;
+      setFavorites((prev) => [...incoming, ...prev]);
+      setEditingId(null);
+      setPendingImport(null);
+      setIsFetchingMeta(false);
+      setFetchError('');
+      setIsFormOpen(false);
+    });
+    return () => cleanup?.();
+  }, [setFavorites]);
 
   useEffect(() => {
     if (formMode !== 'json') {

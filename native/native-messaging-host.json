@@ -1,0 +1,7 @@
+{
+  "name": "com.private_video_hub.desktop",
+  "description": "Private Video Hub native messaging host",
+  "path": "D:\\\\git\\\\Private-video-hub-desktop\\\\native\\\\native-messaging-host.cmd",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://mebceiekeelnkcdibghflcebcpgbegnf/"]
+}

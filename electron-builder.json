@@ -25,6 +25,15 @@
     {
       "from": "native/mpv/build/Release/mpvaddon.node",
       "to": "mpv/mpvaddon.node"
+    },
+    {
+      "from": "native",
+      "to": "native",
+      "filter": [
+        "native-messaging-host.cjs",
+        "native-messaging-host.cmd",
+        "native-messaging-host.json"
+      ]
     }
   ],
   "win": {
@@ -55,6 +64,7 @@
   },
   "nsis": {
     "oneClick": false,
-    "allowToChangeInstallationDirectory": true
+    "allowToChangeInstallationDirectory": true,
+    "include": "build/nsis-native-host.nsh"
   }
 }

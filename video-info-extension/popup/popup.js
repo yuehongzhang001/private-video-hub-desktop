@@ -2,6 +2,7 @@
 // Handles UI rendering and user interactions
 
 let g_videos = [];
+const NATIVE_HOST_NAME = 'com.private_video_hub.desktop';
 
 document.addEventListener('DOMContentLoaded', async () => {
     const loadingEl = document.getElementById('loading');
@@ -199,6 +200,9 @@ function createVideoCard(video, index) {
         <button class="btn btn-primary" data-action="copy-json" data-index="${index}">
           复制JSON
         </button>
+        <button class="btn btn-accent" data-action="send-app" data-index="${index}">
+          发送到应用
+        </button>
         <button class="btn btn-secondary" data-action="open-url" data-index="${index}">
           打开链接
         </button>
@@ -208,9 +212,11 @@ function createVideoCard(video, index) {
 
     // Add event listeners
     const copyBtn = card.querySelector('[data-action="copy-json"]');
+    const sendBtn = card.querySelector('[data-action="send-app"]');
     const openBtn = card.querySelector('[data-action="open-url"]');
 
     copyBtn.addEventListener('click', () => copyVideoJson(video));
+    sendBtn.addEventListener('click', () => sendVideoInfoToApp(video));
     openBtn.addEventListener('click', () => openVideoUrl(video.url));
 
     return card;
@@ -300,6 +306,38 @@ function showError() {
 function showEmpty() {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('empty').classList.remove('hidden');
+}
+
+/**
+ * Send video data to desktop app via native messaging
+ */
+function sendVideoInfoToApp(video) {
+    const payload = {
+        title: video.title,
+        url: video.url,
+        duration: video.duration,
+        thumbnailUrl: video.thumbnailUrl,
+        siteName: video.siteName,
+        siteIconUrl: video.siteIconUrl
+    };
+
+    chrome.runtime.sendNativeMessage(
+        NATIVE_HOST_NAME,
+        { type: 'favorite', favorite: payload },
+        (response) => {
+            const lastError = chrome.runtime.lastError;
+            if (lastError) {
+                console.error('Native messaging failed:', lastError.message);
+                showToast('❌ 未连接到本地应用');
+                return;
+            }
+            if (response && response.ok) {
+                showToast('✅ 已发送到应用');
+            } else {
+                showToast('❌ 发送失败');
+            }
+        }
+    );
 }
 
 /**

@@ -40,6 +40,7 @@ declare global {
         path?: string;
         url?: string;
       }>;
+      onFavoritesImport?: (handler: (payload: unknown) => void) => () => void;
     };
   }
 }

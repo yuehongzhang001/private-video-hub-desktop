@@ -44,6 +44,26 @@ To run the Electron application in development mode:
 npm run electron:dev
 ```
 
+### Native Messaging (Chrome Extension)
+
+To allow the browser extension to send data to the desktop app via Native Messaging, register the native host manifest.
+
+1. Copy and edit `native/native-messaging-host.json`:
+   - `allowed_origins` must match your extension ID from `chrome://extensions/`
+2. The manifest uses a wrapper script to start Node:
+   - `native/native-messaging-host.cmd` launches `native/native-messaging-host.cjs`
+3. Register the manifest (Windows, Chrome stable):
+
+```powershell
+reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.private_video_hub.desktop" `
+  /ve /t REG_SZ /d "D:\git\Private-video-hub-desktop\native\native-messaging-host.json" /f
+```
+
+Notes:
+- If you use a different Chrome channel, replace `Google\Chrome` with `Google\Chrome Beta/Dev/Canary`.
+- If you use Edge, replace it with `Microsoft\Edge`.
+- Restart Chrome after changes.
+
 ### Building
 
 To build the web version:
@@ -89,6 +109,10 @@ $env:RENDERER_LOG_TO_CONSOLE="1"
 5. Push to the branch (`git push origin feature/amazing-feature`)
 6. Open a Pull Request
 
-## License
+# How to run chrome extension in dev mode:
 
-[MIT](LICENSE)
+add this to registry
+```shell
+reg add "HKCU\Software\Google\Chrome\NativeMessagingHosts\com.private_video_hub.desktop" /ve /t REG_SZ /d "D:\git\Private-video-hub-desktop\native\native-messaging-host.json" /f
+
+```

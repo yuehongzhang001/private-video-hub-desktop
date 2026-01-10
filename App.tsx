@@ -7,6 +7,7 @@ import { VideoPlayer } from './components/VideoPlayer';
 import { FavoritesModule } from './components/FavoritesModule';
 import { translations, Language } from './translations';
 import { thumbnailService } from './services/ThumbnailService';
+import { FAVORITES_STORAGE_KEY, normalizeIncomingFavorites, parseFavorites } from './services/favoritesNormalization';
 
 const GRID_COLUMNS_STORAGE_KEY = 'vhub-column-count';
 const LANG_STORAGE_KEY = 'vhub-lang';
@@ -50,6 +51,18 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem(LANG_STORAGE_KEY, lang);
   }, [lang]);
+
+  useEffect(() => {
+    if (activeSection === 'favorites') return;
+    if (!window.electronAPI?.onFavoritesImport) return;
+    const cleanup = window.electronAPI.onFavoritesImport((payload) => {
+      const incoming = normalizeIncomingFavorites(payload);
+      if (!incoming.length) return;
+      const existing = parseFavorites(localStorage.getItem(FAVORITES_STORAGE_KEY));
+      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify([...incoming, ...existing]));
+    });
+    return () => cleanup?.();
+  }, [activeSection]);
 
   useEffect(() => {
     const updateFps = () => {
