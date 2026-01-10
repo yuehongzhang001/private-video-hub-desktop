@@ -250,6 +250,50 @@ body::-webkit-scrollbar-thumb:hover {
   margin-bottom: 12px;
 }
 
+.video-rating {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+
+.rating-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.rating-stars {
+  display: flex;
+  gap: 4px;
+}
+
+.rating-star {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: var(--transition);
+  padding: 2px;
+}
+
+.rating-star.active {
+  color: var(--primary-light);
+  text-shadow: 0 0 6px rgba(124, 92, 255, 0.35);
+}
+
+.rating-star:hover,
+.rating-star:focus-visible {
+  color: var(--primary-color);
+  outline: none;
+}
+
 /* Action buttons */
 .video-actions {
   display: flex;

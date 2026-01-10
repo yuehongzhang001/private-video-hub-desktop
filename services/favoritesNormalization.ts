@@ -8,8 +8,10 @@ export type FavoriteItem = {
   siteIconUrl?: string;
   thumbnailUrl?: string;
   thumbnailDataUrl?: string;
+  rating?: number;
   createdAt: number;
   lastAccessedAt?: number;
+  clickCount: number;
 };
 
 export const FAVORITES_STORAGE_KEY = 'vhub-favorites';
@@ -34,6 +36,35 @@ const getSiteNameFromUrl = (rawUrl: string) => {
   }
 };
 
+const normalizeRating = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const rounded = Math.round(value);
+    if (rounded >= 1 && rounded <= 5) return rounded;
+    return undefined;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      const rounded = Math.round(parsed);
+      if (rounded >= 1 && rounded <= 5) return rounded;
+    }
+  }
+  return undefined;
+};
+
+const normalizeClickCount = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.floor(value));
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, Math.floor(parsed));
+    }
+  }
+  return 0;
+};
+
 export const normalizeFavorite = (item: any): FavoriteItem | null => {
   if (!item || typeof item !== 'object') return null;
   const url = String(item.url ?? item.link ?? item.href ?? '').trim();
@@ -55,6 +86,8 @@ export const normalizeFavorite = (item: any): FavoriteItem | null => {
   const siteIconText = siteIconUrl != null ? String(siteIconUrl).trim() : '';
   const thumbnailUrl = item.thumbnailUrl != null ? String(item.thumbnailUrl).trim() : '';
   const thumbnailDataUrl = item.thumbnailDataUrl != null ? String(item.thumbnailDataUrl).trim() : '';
+  const rating = normalizeRating(item.rating ?? item.stars ?? item.score);
+  const clickCount = normalizeClickCount(item.clickCount ?? item.clicks ?? item.openCount);
 
   return {
     id: String(item.id ?? `fav-${createdAt}-${Math.random().toString(16).slice(2)}`),
@@ -66,8 +99,10 @@ export const normalizeFavorite = (item: any): FavoriteItem | null => {
     siteIconUrl: siteIconText || undefined,
     thumbnailUrl: thumbnailUrl || undefined,
     thumbnailDataUrl: thumbnailDataUrl || undefined,
+    rating,
     createdAt,
-    lastAccessedAt
+    lastAccessedAt,
+    clickCount
   };
 };
 

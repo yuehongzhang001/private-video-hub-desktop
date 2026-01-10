@@ -165,6 +165,12 @@ function createVideoCard(video, index) {
     // Debug logging
     console.log('Creating card for video:', video);
 
+    const rawRating = Number(video.rating);
+    const normalizedRating = Number.isFinite(rawRating)
+        ? Math.max(0, Math.min(5, Math.round(rawRating)))
+        : 0;
+    video.rating = normalizedRating;
+
     // Priority badge
     const priorityBadge = video.priority === 1 ? '<div class="priority-badge">推荐</div>' : '';
 
@@ -186,6 +192,12 @@ function createVideoCard(video, index) {
     };
     const sourceLabel = sourceLabels[video.source] || '未知';
 
+    const starsHtml = Array.from({ length: 5 }, (_, i) => {
+        const starValue = i + 1;
+        const isActive = normalizedRating >= starValue ? 'active' : '';
+        return `<button class="rating-star ${isActive}" data-rating="${starValue}" type="button" aria-label="${starValue} 星">★</button>`;
+    }).join('');
+
     card.innerHTML = `
     ${priorityBadge}
     ${thumbnailHtml}
@@ -194,6 +206,12 @@ function createVideoCard(video, index) {
       <div class="video-meta">
         ${durationHtml}
         <div class="video-source">📍 ${sourceLabel}</div>
+      </div>
+      <div class="video-rating" role="radiogroup" aria-label="评分">
+        <span class="rating-label">评分</span>
+        <div class="rating-stars">
+          ${starsHtml}
+        </div>
       </div>
       <div class="video-url">${escapeHtml(video.url || '')}</div>
       <div class="video-actions">
@@ -218,6 +236,20 @@ function createVideoCard(video, index) {
     copyBtn.addEventListener('click', () => copyVideoJson(video));
     sendBtn.addEventListener('click', () => sendVideoInfoToApp(video));
     openBtn.addEventListener('click', () => openVideoUrl(video.url));
+
+    const starButtons = card.querySelectorAll('.rating-star');
+    starButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const ratingValue = Number(button.dataset.rating || 0);
+            if (!ratingValue) return;
+            video.rating = ratingValue;
+            starButtons.forEach((star) => {
+                const starRating = Number(star.dataset.rating || 0);
+                star.classList.toggle('active', starRating <= ratingValue);
+            });
+        });
+    });
 
     return card;
 }
@@ -269,7 +301,8 @@ function copyVideoJson(video) {
         duration: video.duration,
         thumbnailUrl: video.thumbnailUrl,
         siteName: video.siteName,
-        siteIconUrl: video.siteIconUrl
+        siteIconUrl: video.siteIconUrl,
+        rating: video.rating
     };
 
     const jsonString = JSON.stringify(jsonData, null, 2);
@@ -318,7 +351,8 @@ function sendVideoInfoToApp(video) {
         duration: video.duration,
         thumbnailUrl: video.thumbnailUrl,
         siteName: video.siteName,
-        siteIconUrl: video.siteIconUrl
+        siteIconUrl: video.siteIconUrl,
+        rating: video.rating
     };
 
     chrome.runtime.sendNativeMessage(

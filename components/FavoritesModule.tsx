@@ -21,6 +21,7 @@ type FormState = {
   siteIconUrl: string;
   thumbnailUrl: string;
   thumbnailDataUrl: string;
+  rating: string;
 };
 
 const FAVORITES_COLUMNS_KEY = 'vhub-favorites-columns';
@@ -35,7 +36,8 @@ const emptyForm: FormState = {
   siteName: '',
   siteIconUrl: '',
   thumbnailUrl: '',
-  thumbnailDataUrl: ''
+  thumbnailDataUrl: '',
+  rating: ''
 };
 
 const sanitizeJsonInput = (raw: string) => {
@@ -72,6 +74,29 @@ const formatTime = (ts?: number) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
+const parseRatingInput = (value: string) => {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  const rounded = Math.round(parsed);
+  if (rounded < 1 || rounded > 5) return undefined;
+  return rounded;
+};
+
+const renderStarIcon = (key: string, className: string) => (
+  <svg
+    key={key}
+    className={`w-3 h-3 ${className}`}
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+  >
+    <path
+      fill="currentColor"
+      d="M12 2.25l2.76 5.59 6.18.9-4.47 4.35 1.05 6.14L12 16.9 6.48 19.23l1.05-6.14L3.06 8.74l6.18-.9L12 2.25z"
+    />
+  </svg>
+);
+
 const FavoriteCard: React.FC<{
   item: FavoriteItem;
   onOpen: (item: FavoriteItem) => void;
@@ -84,6 +109,14 @@ const FavoriteCard: React.FC<{
   const imageSrc = item.thumbnailDataUrl || item.thumbnailUrl;
   const showImage = Boolean(imageSrc) && !imageFailed;
   const showSiteIcon = Boolean(item.siteIconUrl);
+  const ratingValue = item.rating ?? 0;
+  const ratingStars = Array.from({ length: 5 }, (_, index) => {
+    const isActive = index < ratingValue;
+    return renderStarIcon(
+      `card-${item.id}-${index}`,
+      isActive ? 'text-amber-400' : 'text-zinc-700'
+    );
+  });
 
   const handleImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
     const target = event.currentTarget;
@@ -143,6 +176,14 @@ const FavoriteCard: React.FC<{
         <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest text-zinc-600">
           <span>{t.favoritesSortRecent}: {formatTime(item.createdAt)}</span>
           {item.lastAccessedAt && <span>{t.favoritesSortAccessed}: {formatTime(item.lastAccessedAt)}</span>}
+        </div>
+        <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-zinc-500">
+          <span>{t.favoritesRatingLabel}:</span>
+          <div className="flex items-center gap-1" aria-label={t.favoritesRatingLabel}>
+            {ratingStars}
+          </div>
+          <span className="text-zinc-700">|</span>
+          <span>{t.favoritesClicksLabel}: {item.clickCount}</span>
         </div>
         <div className="flex items-center gap-3 pt-2 mt-auto">
           <button
@@ -226,7 +267,13 @@ export const FavoritesModule: React.FC<{
   const handleOpen = useCallback((item: FavoriteItem) => {
     setFavorites((prev) =>
       prev.map((entry) =>
-        entry.id === item.id ? { ...entry, lastAccessedAt: Date.now() } : entry
+        entry.id === item.id
+          ? {
+              ...entry,
+              lastAccessedAt: Date.now(),
+              clickCount: (entry.clickCount || 0) + 1
+            }
+          : entry
       )
     );
     window.open(item.url, '_blank', 'noopener,noreferrer');
@@ -257,7 +304,8 @@ export const FavoritesModule: React.FC<{
       siteName: item.siteName,
       siteIconUrl: item.siteIconUrl,
       thumbnailUrl: item.thumbnailUrl,
-      thumbnailDataUrl: item.thumbnailDataUrl
+      thumbnailDataUrl: item.thumbnailDataUrl,
+      rating: item.rating
     }, null, 2));
     setForm({
       title: item.title,
@@ -267,13 +315,15 @@ export const FavoritesModule: React.FC<{
       siteName: item.siteName || '',
       siteIconUrl: item.siteIconUrl || '',
       thumbnailUrl: item.thumbnailUrl || '',
-      thumbnailDataUrl: item.thumbnailDataUrl || ''
+      thumbnailDataUrl: item.thumbnailDataUrl || '',
+      rating: item.rating ? String(item.rating) : ''
     });
     setIsFormOpen(true);
   }, []);
 
   const handleSave = useCallback(() => {
     if (!form.title.trim() || !form.url.trim()) return;
+    const rating = parseRatingInput(form.rating);
 
     if (editingId) {
       setFavorites((prev) =>
@@ -288,7 +338,8 @@ export const FavoritesModule: React.FC<{
                 siteName: form.siteName.trim() || undefined,
                 siteIconUrl: form.siteIconUrl.trim() || undefined,
                 thumbnailUrl: form.thumbnailUrl.trim() || undefined,
-                thumbnailDataUrl: form.thumbnailDataUrl || undefined
+                thumbnailDataUrl: form.thumbnailDataUrl || undefined,
+                rating
               }
             : entry
         )
@@ -305,7 +356,9 @@ export const FavoritesModule: React.FC<{
         siteIconUrl: form.siteIconUrl.trim() || undefined,
         thumbnailUrl: form.thumbnailUrl.trim() || undefined,
         thumbnailDataUrl: form.thumbnailDataUrl || undefined,
-        createdAt: now
+        rating,
+        createdAt: now,
+        clickCount: 0
       };
       const nextItems = pendingImport?.length
         ? [
@@ -318,7 +371,8 @@ export const FavoritesModule: React.FC<{
               siteName: manualEntry.siteName,
               siteIconUrl: manualEntry.siteIconUrl,
               thumbnailUrl: manualEntry.thumbnailUrl,
-              thumbnailDataUrl: manualEntry.thumbnailDataUrl
+              thumbnailDataUrl: manualEntry.thumbnailDataUrl,
+              rating: manualEntry.rating
             },
             ...pendingImport.slice(1)
           ]
@@ -457,7 +511,8 @@ export const FavoritesModule: React.FC<{
         siteName: first.siteName || '',
         siteIconUrl: first.siteIconUrl || '',
         thumbnailUrl: first.thumbnailUrl || '',
-        thumbnailDataUrl: first.thumbnailDataUrl || ''
+        thumbnailDataUrl: first.thumbnailDataUrl || '',
+        rating: first.rating ? String(first.rating) : ''
       });
       setEditingId(null);
       setFetchError('');
@@ -730,6 +785,40 @@ export const FavoritesModule: React.FC<{
                       placeholder="https://image..."
                       className="mt-2 w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 outline-none"
                     />
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="text-zinc-500 text-xs font-bold uppercase tracking-widest">
+                    {t.favoritesRatingLabel}
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: 5 }, (_, index) => {
+                          const starValue = index + 1;
+                          const isActive = starValue <= (parseRatingInput(form.rating) || 0);
+                          return (
+                            <button
+                              key={`form-star-${starValue}`}
+                              type="button"
+                              onClick={() => setForm((prev) => ({ ...prev, rating: String(starValue) }))}
+                              className="p-0.5"
+                              aria-label={`${starValue} star`}
+                            >
+                              {renderStarIcon(
+                                `form-star-icon-${starValue}`,
+                                isActive ? 'text-amber-400' : 'text-zinc-700'
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, rating: '' }))}
+                        className="text-[11px] font-black uppercase tracking-widest text-zinc-500 hover:text-white"
+                      >
+                        {t.favoritesNoRating}
+                      </button>
+                    </div>
                   </label>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
