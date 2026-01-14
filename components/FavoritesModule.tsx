@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TranslationBundle } from '../translations';
 import {
   FAVORITES_STORAGE_KEY,
+  mergeFavoritesByUrl,
   normalizeFavorite,
   normalizeIncomingFavorites,
   parseFavorites,
@@ -377,7 +378,7 @@ export const FavoritesModule: React.FC<{
             ...pendingImport.slice(1)
           ]
         : [manualEntry];
-      setFavorites((prev) => [...nextItems, ...prev]);
+      setFavorites((prev) => mergeFavoritesByUrl(prev, nextItems, now));
     }
 
     setEditingId(null);
@@ -422,7 +423,7 @@ export const FavoritesModule: React.FC<{
     const cleanup = window.electronAPI.onFavoritesImport((payload) => {
       const incoming = normalizeIncomingFavorites(payload);
       if (!incoming.length) return;
-      setFavorites((prev) => [...incoming, ...prev]);
+      setFavorites((prev) => mergeFavoritesByUrl(prev, incoming));
       setEditingId(null);
       setPendingImport(null);
       setIsFetchingMeta(false);

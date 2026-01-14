@@ -145,3 +145,44 @@ export const normalizeIncomingFavorites = (payload: unknown) => {
     .map((item) => normalizeFavorite(item))
     .filter((item): item is FavoriteItem => Boolean(item));
 };
+
+const normalizeUrlKey = (url: string) => url.trim();
+
+const dedupeByUrlKeepLast = (items: FavoriteItem[]) => {
+  const seen = new Set<string>();
+  const result: FavoriteItem[] = [];
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const item = items[i];
+    const key = normalizeUrlKey(item.url);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.unshift(item);
+  }
+  return result;
+};
+
+export const mergeFavoritesByUrl = (
+  existing: FavoriteItem[],
+  incoming: FavoriteItem[],
+  now = Date.now()
+) => {
+  if (!incoming.length) return existing;
+  const existingUnique = dedupeByUrlKeepLast(existing);
+  const existingByUrl = new Map(
+    existingUnique.map((item) => [normalizeUrlKey(item.url), item])
+  );
+  const incomingUnique = dedupeByUrlKeepLast(incoming).map((item) => {
+    const key = normalizeUrlKey(item.url);
+    const previous = existingByUrl.get(key);
+    return {
+      ...item,
+      createdAt: now,
+      clickCount: previous?.clickCount ?? item.clickCount
+    };
+  });
+  const incomingKeys = new Set(incomingUnique.map((item) => normalizeUrlKey(item.url)));
+  const mergedExisting = existingUnique.filter(
+    (item) => !incomingKeys.has(normalizeUrlKey(item.url))
+  );
+  return [...incomingUnique, ...mergedExisting];
+};
