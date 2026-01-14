@@ -303,14 +303,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   useEffect(() => {
     setIsEnded(false);
     displayProgressRef.current = 0;
+    setDisplayProgress(0);
+    setMpvTime(null);
+    setMpvDuration(null);
     if (isDeleted) return;
     setIsPlaying(true);
     if (useMpv && mpvStatus === 'ready') {
+      mpvController.command(mpvOwnerRef.current, ['seek', '0', 'absolute', 'keyframes']);
       mpvController.command(mpvOwnerRef.current, ['set', 'pause', 'no']);
       return;
     }
     if (videoRef.current) {
       const el = videoRef.current;
+      try {
+        el.currentTime = 0;
+      } catch {}
       if (el.paused) {
         el.play().catch(() => {});
       }
@@ -622,6 +629,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     setVolume(1);
     mpvController.command(mpvOwnerRef.current, ['set', 'volume', '100']);
     mpvController.command(mpvOwnerRef.current, ['set', 'mute', 'no']);
+    mpvController.command(mpvOwnerRef.current, ['seek', '0', 'absolute', 'keyframes']);
+    mpvController.command(mpvOwnerRef.current, ['set', 'pause', 'no']);
     setUseMpv(true);
     setIsPlaying(true);
     setMpvStatus('ready');
