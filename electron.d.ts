@@ -14,6 +14,8 @@ declare global {
       }> | null>;
       createThumbnail?: (inputPath: string, options?: { outputPath?: string; width?: number; height?: number; quality?: number }) => Promise<{ ok: boolean; error?: string; outputPath?: string; dataUrl?: string; duration?: number }>;
       trashItem?: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
+      toggleAppFullscreen?: () => Promise<{ ok: boolean; isFullscreen: boolean }>;
+      getAppFullscreen?: () => Promise<{ ok: boolean; isFullscreen: boolean }>;
       playWithMpv?: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
       mpvInit?: () => { ok: boolean; error?: string };
       mpvLoad?: (filePath: string) => { ok: boolean; error?: string };
@@ -41,6 +43,7 @@ declare global {
         url?: string;
       }>;
       onFavoritesImport?: (handler: (payload: unknown) => void) => () => void;
+      onAppFullscreenChange?: (handler: (isFullscreen: boolean) => void) => () => void;
     };
   }
 }

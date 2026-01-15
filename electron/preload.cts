@@ -81,6 +81,8 @@ try {
       return ipcRenderer.invoke('ffmpeg:thumbnail', { inputPath, ...(options || {}) });
     },
     trashItem: (filePath: string) => ipcRenderer.invoke('file:trash', filePath),
+    toggleAppFullscreen: () => ipcRenderer.invoke('window:toggleFullscreen'),
+    getAppFullscreen: () => ipcRenderer.invoke('window:getFullscreen'),
     playWithMpv: (filePath: string) => ipcRenderer.invoke('mpv:play', filePath),
     mpvInit: () => {
       if (!mpvAddon) return { ok: false, error: 'addon_missing' };
@@ -158,6 +160,11 @@ try {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => handler(payload);
       ipcRenderer.on('favorites:nativeImport', listener);
       return () => ipcRenderer.removeListener('favorites:nativeImport', listener);
+    },
+    onAppFullscreenChange: (handler: (isFullscreen: boolean) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: boolean) => handler(!!payload);
+      ipcRenderer.on('window:fullscreen-changed', listener);
+      return () => ipcRenderer.removeListener('window:fullscreen-changed', listener);
     },
     // 可以在这里添加更多的 API
   });

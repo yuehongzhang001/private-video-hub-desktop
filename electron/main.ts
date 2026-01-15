@@ -111,6 +111,12 @@ function createWindow() {
 
   mainWindow = new BrowserWindow(windowOptions);
   mainWindow.setMenuBarVisibility(false);
+  mainWindow.on('enter-full-screen', () => {
+    mainWindow?.webContents.send('window:fullscreen-changed', true);
+  });
+  mainWindow.on('leave-full-screen', () => {
+    mainWindow?.webContents.send('window:fullscreen-changed', false);
+  });
 
   // 开发环境使用 Vite 服务器，生产环境使用打包后的文件
   if (process.env.NODE_ENV === 'development') {
@@ -411,6 +417,22 @@ ipcMain.handle('file:trash', async (_event, filePath: string) => {
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
+});
+
+ipcMain.handle('window:toggleFullscreen', () => {
+  if (!mainWindow) {
+    return { ok: false, isFullscreen: false };
+  }
+  const next = !mainWindow.isFullScreen();
+  mainWindow.setFullScreen(next);
+  return { ok: true, isFullscreen: next };
+});
+
+ipcMain.handle('window:getFullscreen', () => {
+  if (!mainWindow) {
+    return { ok: false, isFullscreen: false };
+  }
+  return { ok: true, isFullscreen: mainWindow.isFullScreen() };
 });
 
 ipcMain.handle('ffmpeg:thumbnail', async (_event, options: { inputPath: string; outputPath?: string; width?: number; height?: number; quality?: number }) => {

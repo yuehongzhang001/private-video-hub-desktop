@@ -35,6 +35,7 @@ const App: React.FC = () => {
   const [activeSection, setActiveSection] = useState<'library' | 'favorites'>('library');
   const [favoritesSearchQuery, setFavoritesSearchQuery] = useState('');
   const [favoritesOpenAddTick, setFavoritesOpenAddTick] = useState(0);
+  const [isAppFullscreen, setIsAppFullscreen] = useState(false);
   
   const t = translations[lang];
 
@@ -88,6 +89,25 @@ const App: React.FC = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, sortMode]);
+
+  useEffect(() => {
+    if (window.electronAPI?.getAppFullscreen) {
+      window.electronAPI.getAppFullscreen().then((result) => {
+        if (result?.ok) setIsAppFullscreen(!!result.isFullscreen);
+      });
+    }
+
+    if (window.electronAPI?.onAppFullscreenChange) {
+      const cleanup = window.electronAPI.onAppFullscreenChange((isFullscreen) => {
+        setIsAppFullscreen(isFullscreen);
+      });
+      return () => cleanup?.();
+    }
+
+    const handleChange = () => setIsAppFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleChange);
+    return () => document.removeEventListener('fullscreenchange', handleChange);
+  }, []);
 
   const activeVideo = useMemo(() => 
     videos.find(v => v.id === activeVideoId) || null
@@ -252,6 +272,20 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const toggleAppFullscreen = useCallback(async () => {
+    if (window.electronAPI?.toggleAppFullscreen) {
+      const result = await window.electronAPI.toggleAppFullscreen();
+      if (result?.ok) setIsAppFullscreen(!!result.isFullscreen);
+      return;
+    }
+
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen?.();
+    } else {
+      await document.exitFullscreen?.();
+    }
+  }, []);
+
   const handleOpenVideo = useCallback((id: string | null) => {
     setDeletedNotice(null);
     setPlaylistAnchorIndex(null);
@@ -350,6 +384,21 @@ const App: React.FC = () => {
               {t.favoritesAddTitle}
             </button>
           )}
+          <button
+            onClick={toggleAppFullscreen}
+            className="px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-800/50 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg flex items-center gap-2"
+          >
+            {isAppFullscreen ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 4v4H4M16 4v4h4M8 20v-4H4M16 20v-4h4" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
+              </svg>
+            )}
+            {isAppFullscreen ? t.exitFullscreen : t.enterFullscreen}
+          </button>
           <button 
             onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
             className="px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-800/50 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg"
