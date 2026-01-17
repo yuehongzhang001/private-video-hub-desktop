@@ -32,6 +32,54 @@ const appendLogLine = async (filePath: string, level: LogLevel, message: string,
   }
 };
 
+type AppState = {
+  lastImportDirs?: string[];
+  videoStats?: Record<string, { clicks: number; lastOpenedAt?: number }>;
+};
+
+const getAppStatePath = () => path.join(app.getPath('userData'), 'app-state.json');
+
+const readAppState = async (): Promise<AppState> => {
+  try {
+    const raw = await fs.promises.readFile(getAppStatePath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const state = parsed as AppState;
+    if (Array.isArray(state.lastImportDirs)) {
+      state.lastImportDirs = state.lastImportDirs.filter(
+        (dir): dir is string => typeof dir === 'string' && dir.trim().length > 0
+      );
+    } else {
+      delete state.lastImportDirs;
+    }
+    if (state.videoStats && typeof state.videoStats === 'object' && !Array.isArray(state.videoStats)) {
+      const cleaned: AppState['videoStats'] = {};
+      for (const [key, value] of Object.entries(state.videoStats)) {
+        if (typeof key !== 'string' || !key.trim()) continue;
+        const clicksRaw = (value as { clicks?: unknown }).clicks;
+        const lastOpenedAtRaw = (value as { lastOpenedAt?: unknown }).lastOpenedAt;
+        const clicks = Number.isFinite(clicksRaw) ? Math.max(0, Math.floor(clicksRaw as number)) : 0;
+        const lastOpenedAt = Number.isFinite(lastOpenedAtRaw) ? (lastOpenedAtRaw as number) : undefined;
+        if (clicks > 0 || lastOpenedAt) {
+          cleaned[key] = { clicks, ...(lastOpenedAt ? { lastOpenedAt } : {}) };
+        }
+      }
+      state.videoStats = cleaned;
+    } else {
+      delete state.videoStats;
+    }
+    return state;
+  } catch {
+    return {};
+  }
+};
+
+const writeAppState = async (state: AppState) => {
+  const filePath = getAppStatePath();
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.promises.writeFile(filePath, JSON.stringify(state, null, 2), 'utf8');
+};
+
 let rendererLogPath: string | null = null;
 let mirrorRendererToConsole = false;
 
@@ -365,6 +413,12 @@ ipcMain.handle('dialog:openDirectoryFiles', async (_event, extensions: string[])
     return null;
   }
 
+  const scanResult = await scanDirectories(result.filePaths, extensions);
+  console.log('[dialog] files:', scanResult.files.length);
+  return { dirs: result.filePaths, files: scanResult.files };
+});
+
+async function scanDirectories(dirs: string[], extensions: string[]) {
   const allowed = new Set((extensions || []).map((ext) => ext.toLowerCase()));
   const files: Array<{
     path: string;
@@ -375,7 +429,12 @@ ipcMain.handle('dialog:openDirectoryFiles', async (_event, extensions: string[])
   }> = [];
 
   const walk = async (dir: string) => {
-    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
@@ -396,12 +455,68 @@ ipcMain.handle('dialog:openDirectoryFiles', async (_event, extensions: string[])
     }
   };
 
-  for (const dir of result.filePaths) {
+  for (const dir of dirs) {
+    if (typeof dir !== 'string' || !dir.trim()) continue;
     await walk(dir);
   }
 
-  console.log('[dialog] files:', files.length);
-  return files;
+  return { files };
+}
+
+ipcMain.handle('dialog:scanDirectoryFiles', async (_event, dirs: string[], extensions: string[]) => {
+  if (!Array.isArray(dirs) || dirs.length === 0) {
+    return { ok: false, error: 'missing_dirs' };
+  }
+  const result = await scanDirectories(dirs, extensions);
+  return { ok: true, files: result.files };
+});
+
+ipcMain.handle('appState:get', async () => {
+  try {
+    const state = await readAppState();
+    return { ok: true, state };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('appState:setLastImportDirs', async (_event, dirs: string[]) => {
+  if (!Array.isArray(dirs)) {
+    return { ok: false, error: 'missing_dirs' };
+  }
+  try {
+    const state = await readAppState();
+    state.lastImportDirs = dirs.filter((dir): dir is string => typeof dir === 'string' && dir.trim().length > 0);
+    await writeAppState(state);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle('appState:setVideoStats', async (_event, videoStats: AppState['videoStats']) => {
+  if (!videoStats || typeof videoStats !== 'object' || Array.isArray(videoStats)) {
+    return { ok: false, error: 'invalid_stats' };
+  }
+  try {
+    const cleaned: AppState['videoStats'] = {};
+    for (const [key, value] of Object.entries(videoStats)) {
+      if (typeof key !== 'string' || !key.trim()) continue;
+      const clicksRaw = (value as { clicks?: unknown }).clicks;
+      const lastOpenedAtRaw = (value as { lastOpenedAt?: unknown }).lastOpenedAt;
+      const clicks = Number.isFinite(clicksRaw) ? Math.max(0, Math.floor(clicksRaw as number)) : 0;
+      const lastOpenedAt = Number.isFinite(lastOpenedAtRaw) ? (lastOpenedAtRaw as number) : undefined;
+      if (clicks > 0 || lastOpenedAt) {
+        cleaned[key] = { clicks, ...(lastOpenedAt ? { lastOpenedAt } : {}) };
+      }
+    }
+    const state = await readAppState();
+    state.videoStats = cleaned;
+    await writeAppState(state);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 });
 
 ipcMain.handle('file:trash', async (_event, filePath: string) => {

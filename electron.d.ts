@@ -5,13 +5,27 @@ declare global {
   interface Window {
     electronAPI?: {
       openDirectory: () => Promise<string[] | null>;
-      openDirectoryFiles?: (extensions: string[]) => Promise<Array<{
-        path: string;
-        url: string;
-        name: string;
-        size: number;
-        lastModified: number;
-      }> | null>;
+      openDirectoryFiles?: (extensions: string[]) => Promise<{
+        dirs: string[];
+        files: Array<{
+          path: string;
+          url: string;
+          name: string;
+          size: number;
+          lastModified: number;
+        }>;
+      } | null>;
+      scanDirectoryFiles?: (dirs: string[], extensions: string[]) => Promise<{
+        ok: boolean;
+        files?: Array<{
+          path: string;
+          url: string;
+          name: string;
+          size: number;
+          lastModified: number;
+        }>;
+        error?: string;
+      }>;
       createThumbnail?: (inputPath: string, options?: { outputPath?: string; width?: number; height?: number; quality?: number }) => Promise<{ ok: boolean; error?: string; outputPath?: string; dataUrl?: string; duration?: number }>;
       trashItem?: (filePath: string) => Promise<{ ok: boolean; error?: string }>;
       toggleAppFullscreen?: () => Promise<{ ok: boolean; isFullscreen: boolean }>;
@@ -42,6 +56,16 @@ declare global {
         path?: string;
         url?: string;
       }>;
+      getAppState?: () => Promise<{
+        ok: boolean;
+        state?: {
+          lastImportDirs?: string[];
+          videoStats?: Record<string, { clicks: number; lastOpenedAt?: number }>;
+        };
+        error?: string;
+      }>;
+      setLastImportDirs?: (dirs: string[]) => Promise<{ ok: boolean; error?: string }>;
+      setVideoStats?: (stats: Record<string, { clicks: number; lastOpenedAt?: number }>) => Promise<{ ok: boolean; error?: string }>;
       onFavoritesImport?: (handler: (payload: unknown) => void) => () => void;
       onAppFullscreenChange?: (handler: (isFullscreen: boolean) => void) => () => void;
     };

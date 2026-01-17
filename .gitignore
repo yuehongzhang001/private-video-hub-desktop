@@ -36,3 +36,5 @@ release/
 # TODO: add this later
 libmpv/*
 native/mpv/build/
+
+.codex/

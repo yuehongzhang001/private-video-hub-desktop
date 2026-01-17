@@ -77,6 +77,10 @@ try {
       console.log('[preload] openDirectoryFiles', extensions);
       return ipcRenderer.invoke('dialog:openDirectoryFiles', extensions);
     },
+    scanDirectoryFiles: (dirs: string[], extensions: string[]) => {
+      console.log('[preload] scanDirectoryFiles', dirs?.length);
+      return ipcRenderer.invoke('dialog:scanDirectoryFiles', dirs, extensions);
+    },
     createThumbnail: (inputPath: string, options?: { outputPath?: string; width?: number; height?: number; quality?: number }) => {
       return ipcRenderer.invoke('ffmpeg:thumbnail', { inputPath, ...(options || {}) });
     },
@@ -156,6 +160,10 @@ try {
     }),
     favoritesFetchMeta: (url: string) => ipcRenderer.invoke('favorites:fetchMeta', url),
     favoritesImportCover: (sourcePath: string) => ipcRenderer.invoke('favorites:importCover', sourcePath),
+    getAppState: () => ipcRenderer.invoke('appState:get'),
+    setLastImportDirs: (dirs: string[]) => ipcRenderer.invoke('appState:setLastImportDirs', dirs),
+    setVideoStats: (stats: { [key: string]: { clicks: number; lastOpenedAt?: number } }) =>
+      ipcRenderer.invoke('appState:setVideoStats', stats),
     onFavoritesImport: (handler: (payload: unknown) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => handler(payload);
       ipcRenderer.on('favorites:nativeImport', listener);

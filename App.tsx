@@ -18,6 +18,16 @@ const GRID_COLUMNS_STORAGE_KEY = 'vhub-column-count';
 const LANG_STORAGE_KEY = 'vhub-lang';
 const PAGE_SIZE = 24; 
 
+type DirectoryFileEntry = {
+  path: string;
+  url: string;
+  name: string;
+  size: number;
+  lastModified: number;
+};
+
+type VideoStatsMap = Record<string, { clicks: number; lastOpenedAt?: number }>;
+
 const App: React.FC = () => {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
@@ -36,6 +46,14 @@ const App: React.FC = () => {
   const [favoritesSearchQuery, setFavoritesSearchQuery] = useState('');
   const [favoritesOpenAddTick, setFavoritesOpenAddTick] = useState(0);
   const [isAppFullscreen, setIsAppFullscreen] = useState(false);
+  const [lastImportDirs, setLastImportDirs] = useState<string[] | null>(null);
+  const [isQuickMenuOpen, setIsQuickMenuOpen] = useState(false);
+  const quickMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const searchWrapRef = useRef<HTMLDivElement | null>(null);
+  const [videoStats, setVideoStats] = useState<VideoStatsMap>({});
+  const [isStatsHydrated, setIsStatsHydrated] = useState(false);
+  const videoStatsRef = useRef<VideoStatsMap>({});
   
   const t = translations[lang];
 
@@ -59,6 +77,97 @@ const App: React.FC = () => {
   }, [lang]);
 
   useEffect(() => {
+    videoStatsRef.current = videoStats;
+  }, [videoStats]);
+
+  const getVideoStatsKey = useCallback((entry: { path?: string; name: string; size: number; lastModified: number }) => {
+    if (entry.path && entry.path.trim()) return `path:${entry.path}`;
+    return `meta:${entry.name}-${entry.size}-${entry.lastModified}`;
+  }, []);
+
+  const replaceVideos = useCallback((entries: DirectoryFileEntry[]) => {
+    const newVideos = entries.map((entry, idx) => {
+      const key = getVideoStatsKey(entry);
+      const clickCount = videoStatsRef.current[key]?.clicks ?? 0;
+      return {
+      id: `${entry.name}-${entry.size}-${entry.lastModified}-${idx}`,
+      path: entry.path,
+      url: entry.url,
+      name: entry.name,
+      size: entry.size,
+      lastModified: entry.lastModified,
+      clickCount
+      };
+    });
+    setVideos(prev => {
+      prev.forEach(v => {
+        if (v.url.startsWith('blob:')) URL.revokeObjectURL(v.url);
+      });
+      return newVideos;
+    });
+    setActiveVideoId(null);
+    setCurrentPage(1);
+  }, [getVideoStatsKey]);
+
+  const persistLastImportDirs = useCallback(async (dirs: string[]) => {
+    setLastImportDirs(dirs);
+    if (window.electronAPI?.setLastImportDirs) {
+      await window.electronAPI.setLastImportDirs(dirs);
+    }
+  }, []);
+
+  const loadFromDirectories = useCallback(async (dirs: string[]) => {
+    if (!window.electronAPI?.scanDirectoryFiles) return;
+    setIsProcessing(true);
+    const result = await window.electronAPI.scanDirectoryFiles(dirs, SUPPORTED_VIDEO_EXTENSIONS);
+    if (!result?.ok) {
+      console.error('Error scanning directories:', result?.error);
+      setIsProcessing(false);
+      return;
+    }
+    replaceVideos(result.files || []);
+    setIsProcessing(false);
+  }, [replaceVideos]);
+
+  useEffect(() => {
+    let canceled = false;
+    if (!window.electronAPI?.getAppState || !window.electronAPI?.scanDirectoryFiles) {
+      setIsStatsHydrated(true);
+      return;
+    }
+    window.electronAPI.getAppState()
+      .then(async (result) => {
+        if (canceled || !result?.ok) return;
+        if (result.state?.videoStats && typeof result.state.videoStats === 'object') {
+          setVideoStats(result.state.videoStats as VideoStatsMap);
+        }
+        const dirs = result.state?.lastImportDirs;
+        if (!dirs || dirs.length === 0) return;
+        setLastImportDirs(dirs);
+        if (canceled) return;
+        setIsProcessing(true);
+        const scan = await window.electronAPI?.scanDirectoryFiles?.(dirs, SUPPORTED_VIDEO_EXTENSIONS);
+        if (canceled) return;
+        if (!scan?.ok) {
+          console.error('Error auto-loading directories:', scan?.error);
+          setIsProcessing(false);
+          return;
+        }
+        replaceVideos(scan.files || []);
+        setIsProcessing(false);
+      })
+      .catch((err) => {
+        if (!canceled) console.error('Error loading app state:', err);
+      })
+      .finally(() => {
+        if (!canceled) setIsStatsHydrated(true);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [replaceVideos]);
+
+  useEffect(() => {
     if (activeSection === 'favorites') return;
     if (!window.electronAPI?.onFavoritesImport) return;
     const cleanup = window.electronAPI.onFavoritesImport((payload) => {
@@ -70,6 +179,36 @@ const App: React.FC = () => {
     });
     return () => cleanup?.();
   }, [activeSection]);
+
+  const handleSearchFocus = useCallback(() => {
+    setIsSearchExpanded(true);
+    setIsQuickMenuOpen(false);
+  }, []);
+
+  const handleSearchBlur = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget as Node | null;
+    if (searchWrapRef.current && next && searchWrapRef.current.contains(next)) return;
+    setIsSearchExpanded(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isQuickMenuOpen) return;
+    const handleClick = (event: MouseEvent) => {
+      if (!quickMenuRef.current) return;
+      if (!quickMenuRef.current.contains(event.target as Node)) {
+        setIsQuickMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsQuickMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isQuickMenuOpen]);
 
   useEffect(() => {
     const updateFps = () => {
@@ -109,6 +248,27 @@ const App: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleChange);
   }, []);
 
+  useEffect(() => {
+    if (!isStatsHydrated || !window.electronAPI?.setVideoStats) return;
+    window.electronAPI.setVideoStats(videoStats).catch((err: unknown) => {
+      console.error('Failed to persist video stats:', err);
+    });
+  }, [videoStats, isStatsHydrated]);
+
+  useEffect(() => {
+    setVideos((prev) => {
+      let changed = false;
+      const next = prev.map((video) => {
+        const key = getVideoStatsKey(video);
+        const clickCount = videoStats[key]?.clicks ?? 0;
+        if ((video.clickCount ?? 0) === clickCount) return video;
+        changed = true;
+        return { ...video, clickCount };
+      });
+      return changed ? next : prev;
+    });
+  }, [videoStats, getVideoStatsKey]);
+
   const activeVideo = useMemo(() => 
     videos.find(v => v.id === activeVideoId) || null
   , [videos, activeVideoId]);
@@ -145,6 +305,12 @@ const App: React.FC = () => {
       const file = files[i];
       const filePath = (file as { path?: string }).path;
       const url = URL.createObjectURL(file);
+      const statsKey = getVideoStatsKey({
+        path: typeof filePath === 'string' ? filePath : undefined,
+        name: file.name,
+        size: file.size,
+        lastModified: file.lastModified
+      });
       newVideos.push({
         id: `${file.name}-${file.size}-${file.lastModified}-${i}`,
         file,
@@ -153,6 +319,7 @@ const App: React.FC = () => {
         name: file.name,
         size: file.size,
         lastModified: file.lastModified,
+        clickCount: videoStatsRef.current[statsKey]?.clicks ?? 0
       });
       if (i % batchSize === 0) await new Promise(r => requestAnimationFrame(r));
     }
@@ -166,32 +333,25 @@ const App: React.FC = () => {
     setIsProcessing(false);
     setCurrentPage(1);
     e.target.value = '';
-  }, []);
+  }, [getVideoStatsKey]);
 
   // 为 Electron 添加处理文件夹选择的函数
   const handleFolderSelect = useCallback(async () => {
     if (window.electronAPI) {
       // 如果在 Electron 环境中，使用 Electron API 选择目录
       try {
-        const entries = await window.electronAPI.openDirectoryFiles?.(SUPPORTED_VIDEO_EXTENSIONS);
-        if (!entries || entries.length === 0) return;
         setIsProcessing(true);
-        const newVideos: VideoItem[] = entries.map((entry, idx) => ({
-          id: `${entry.name}-${entry.size}-${entry.lastModified}-${idx}`,
-          path: entry.path,
-          url: entry.url,
-          name: entry.name,
-          size: entry.size,
-          lastModified: entry.lastModified
-        }));
-        setVideos(prev => {
-          prev.forEach(v => {
-            if (v.url.startsWith('blob:')) URL.revokeObjectURL(v.url);
-          });
-          return newVideos;
-        });
-        setActiveVideoId(null);
-        setCurrentPage(1);
+        const result = await window.electronAPI.openDirectoryFiles?.(SUPPORTED_VIDEO_EXTENSIONS);
+        if (!result) {
+          setIsProcessing(false);
+          return;
+        }
+        const entries = Array.isArray(result) ? result : result.files;
+        const dirs = Array.isArray(result) ? [] : result.dirs;
+        if (dirs.length > 0) {
+          void persistLastImportDirs(dirs);
+        }
+        replaceVideos(entries);
         setIsProcessing(false);
       } catch (error) {
         console.error('Error selecting directory:', error);
@@ -209,7 +369,12 @@ const App: React.FC = () => {
       };
       fileInput.click();
     }
-  }, [handleFiles]);
+  }, [handleFiles, persistLastImportDirs, replaceVideos]);
+
+  const handleRefreshFolder = useCallback(async () => {
+    if (!lastImportDirs || lastImportDirs.length === 0) return;
+    await loadFromDirectories(lastImportDirs);
+  }, [lastImportDirs, loadFromDirectories]);
 
   const filteredAndSortedVideos = useMemo(() => {
     let result = [...videos];
@@ -220,6 +385,7 @@ const App: React.FC = () => {
     switch (sortMode) {
       case SortMode.NEWEST: result.sort((a, b) => b.lastModified - a.lastModified); break;
       case SortMode.SIZE: result.sort((a, b) => b.size - a.size); break;
+      case SortMode.CLICKS: result.sort((a, b) => (b.clickCount ?? 0) - (a.clickCount ?? 0)); break;
       case SortMode.RANDOM: 
         result.sort((a, b) => {
           // Use a seeded random based on video IDs and a stable random seed
@@ -289,8 +455,28 @@ const App: React.FC = () => {
   const handleOpenVideo = useCallback((id: string | null) => {
     setDeletedNotice(null);
     setPlaylistAnchorIndex(null);
+    if (id) {
+      const target = videos.find(v => v.id === id);
+      if (target) {
+        const key = getVideoStatsKey(target);
+        setVideoStats(prev => {
+          const nextClicks = (prev[key]?.clicks ?? 0) + 1;
+          return {
+            ...prev,
+            [key]: { clicks: nextClicks, lastOpenedAt: Date.now() }
+          };
+        });
+        setVideos(prev => {
+          const idx = prev.findIndex(v => v.id === id);
+          if (idx === -1) return prev;
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], clickCount: (updated[idx].clickCount ?? 0) + 1 };
+          return updated;
+        });
+      }
+    }
     setActiveVideoId(id);
-  }, []);
+  }, [videos, getVideoStatsKey]);
 
   const gridDesktopClass = useMemo(() => {
     switch (columnCount) {
@@ -313,38 +499,15 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-zinc-950 select-none overflow-hidden font-sans">
-      <header className="h-20 border-b border-zinc-800 flex items-center px-8 gap-8 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-20">
-        <div className="flex items-center gap-3">
+      <header className="h-20 border-b border-zinc-800 flex items-center px-6 gap-4 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-20">
+        <div className="flex items-center gap-3 shrink-0">
           <div className="w-10 h-10 bg-indigo-600 rounded flex items-center justify-center shadow-lg shadow-indigo-500/20">
             <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" /></svg>
           </div>
           <h1 className="text-xl font-black tracking-tighter text-white hidden sm:block italic text-nowrap">PRIVATE VIDEO HUB</h1>
-        </div>
-
-        {activeSection === 'library' ? (
-          <div className="flex-1 max-w-2xs relative group/search">
-            <input 
-              type="text" placeholder={t.searchPlaceholder} 
-              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-full pl-12 pr-12 py-3 text-base text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 transition-all outline-none placeholder:text-zinc-600"
-            />
-            <svg className="w-5 h-5 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-white transition-all rounded-full hover:bg-zinc-700/50">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex-1 min-w-0">
-            <div className="text-white text-lg font-black uppercase tracking-widest">{t.favoritesEntry}</div>
-          </div>
-        )}
-
-        <div className="flex items-center gap-4">
           <button 
             onClick={() => setActiveSection(activeSection === 'library' ? 'favorites' : 'library')}
-            className="px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-800/50 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg flex items-center gap-2"
+            className="ml-2 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-800/50 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg flex items-center gap-2"
           >
             {activeSection === 'library' ? (
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.518 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.364 1.118l1.518 4.674c.3.921-.755 1.688-1.54 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.784.57-1.838-.197-1.539-1.118l1.518-4.674a1 1 0 00-.364-1.118L2.02 10.1c-.783-.57-.38-1.81.588-1.81h4.915a1 1 0 00.95-.69l1.518-4.674z" /></svg>
@@ -353,26 +516,67 @@ const App: React.FC = () => {
             )}
             {activeSection === 'library' ? t.favoritesEntry : t.back}
           </button>
-          {activeSection === 'favorites' && (
-            <div className="relative group/search">
-              <input
-                type="text"
-                placeholder={t.favoritesSearchPlaceholder}
-                value={favoritesSearchQuery}
-                onChange={(e) => setFavoritesSearchQuery(e.target.value)}
-                className="w-56 bg-zinc-800/50 border border-zinc-700/50 rounded-full pl-10 pr-10 py-2 text-sm text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 transition-all outline-none placeholder:text-zinc-600"
-              />
-              <svg className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              {favoritesSearchQuery && (
-                <button
-                  onClick={() => setFavoritesSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-zinc-500 hover:text-white transition-all rounded-full hover:bg-zinc-700/50"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              )}
-            </div>
-          )}
+        </div>
+
+        {activeSection === 'library' ? (
+          <div
+            ref={searchWrapRef}
+            onFocus={handleSearchFocus}
+            onBlur={handleSearchBlur}
+            className={`flex-1 min-w-0 relative group/search transition-all duration-200 ${
+              isSearchExpanded ? 'max-w-4xl' : 'max-w-sm'
+            }`}
+          >
+            <input 
+              type="text" placeholder={t.searchPlaceholder} 
+              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-full pl-12 pr-12 py-3 text-base text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 transition-all outline-none placeholder:text-zinc-600"
+            />
+            <svg className="w-5 h-5 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            {searchQuery && (
+              <button
+                onMouseDown={(event) => {
+                  if (!isSearchExpanded) event.preventDefault();
+                }}
+                onClick={() => setSearchQuery('')}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-white transition-all rounded-full hover:bg-zinc-700/50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            ref={searchWrapRef}
+            onFocus={handleSearchFocus}
+            onBlur={handleSearchBlur}
+            className={`flex-1 min-w-0 relative group/search transition-all duration-200 ${
+              isSearchExpanded ? 'max-w-4xl' : 'max-w-sm'
+            }`}
+          >
+            <input
+              type="text"
+              placeholder={t.favoritesSearchPlaceholder}
+              value={favoritesSearchQuery}
+              onChange={(e) => setFavoritesSearchQuery(e.target.value)}
+              className="w-full bg-zinc-800/50 border border-zinc-700/50 rounded-full pl-12 pr-12 py-3 text-base text-zinc-200 focus:ring-2 focus:ring-indigo-500/50 transition-all outline-none placeholder:text-zinc-600"
+            />
+            <svg className="w-5 h-5 text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            {favoritesSearchQuery && (
+              <button
+                onMouseDown={(event) => {
+                  if (!isSearchExpanded) event.preventDefault();
+                }}
+                onClick={() => setFavoritesSearchQuery('')}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-white transition-all rounded-full hover:bg-zinc-700/50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className={`flex items-center gap-3 shrink-0 transition-all duration-200 ${isSearchExpanded ? 'opacity-0 pointer-events-none w-0 overflow-hidden' : 'opacity-100'}`}>
           {activeSection === 'favorites' && (
             <button
               onClick={() => setFavoritesOpenAddTick((prev) => prev + 1)}
@@ -384,50 +588,96 @@ const App: React.FC = () => {
               {t.favoritesAddTitle}
             </button>
           )}
-          <button
-            onClick={toggleAppFullscreen}
-            className="px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-800/50 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg flex items-center gap-2"
-          >
-            {isAppFullscreen ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 4v4H4M16 4v4h4M8 20v-4H4M16 20v-4h4" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
-              </svg>
-            )}
-            {isAppFullscreen ? t.exitFullscreen : t.enterFullscreen}
-          </button>
-          <button 
-            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-            className="px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-800/50 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg"
-          >
-            {lang === 'zh' ? 'EN' : '中'}
-          </button>
-          {activeSection === 'library' && videos.length > 0 && (
-            <button 
-              onClick={clearLibrary}
-              className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 whitespace-nowrap shadow-lg border ${
-                isConfirmingClear ? 'bg-red-600 border-red-400 text-white animate-pulse' : 'bg-zinc-800/50 border-zinc-700 hover:bg-zinc-700 text-zinc-400 hover:text-white'
-              }`}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6" /></svg>
-              {isConfirmingClear ? t.confirmClear : t.clearList}
-            </button>
-          )}
           {activeSection === 'library' && (
             <div className="flex flex-col items-end">
-              <button
-                onClick={handleFolderSelect}
-                className="cursor-pointer bg-white hover:bg-zinc-200 text-black px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl shadow-white/5 whitespace-nowrap"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-                {t.importFolder}
-              </button>
-              <span className="text-[9px] text-zinc-600 font-bold uppercase tracking-wider mt-1 mr-1">{t.localPlayback}</span>
+              <div className="flex items-center gap-3">
+                {lastImportDirs?.length && window.electronAPI?.scanDirectoryFiles && (
+                  <button
+                    onClick={handleRefreshFolder}
+                    disabled={isProcessing}
+                    className="cursor-pointer bg-zinc-900 hover:bg-zinc-800 text-zinc-200 px-4 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg border border-zinc-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 4v6h6M20 20v-6h-6M5 9a7 7 0 0 1 12-2l3 3M19 15a7 7 0 0 1-12 2l-3-3" /></svg>
+                    {isProcessing ? t.refreshing : t.refreshFolder}
+                  </button>
+                )}
+                <button
+                  onClick={handleFolderSelect}
+                  className="cursor-pointer bg-white hover:bg-zinc-200 text-black px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl shadow-white/5 whitespace-nowrap"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                  {t.importFolder}
+                </button>
+              </div>
             </div>
           )}
+          <div className="relative" ref={quickMenuRef}>
+            <button
+              onClick={() => setIsQuickMenuOpen((prev) => !prev)}
+              aria-haspopup="menu"
+              aria-expanded={isQuickMenuOpen}
+              className="px-3 py-2 rounded-full text-xs font-black uppercase tracking-widest bg-zinc-800/50 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-all shadow-lg flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h.01M12 12h.01M19 12h.01" />
+              </svg>
+              {t.more}
+            </button>
+            {isQuickMenuOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-56 rounded-2xl border border-zinc-700 bg-zinc-900/95 shadow-2xl backdrop-blur-md p-2 z-30"
+              >
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setIsQuickMenuOpen(false);
+                    toggleAppFullscreen();
+                  }}
+                  className="w-full px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-all flex items-center gap-2"
+                >
+                  {isAppFullscreen ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 4v4H4M16 4v4h4M8 20v-4H4M16 20v-4h4" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
+                    </svg>
+                  )}
+                  {isAppFullscreen ? t.exitFullscreen : t.enterFullscreen}
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setIsQuickMenuOpen(false);
+                    setLang(lang === 'zh' ? 'en' : 'zh');
+                  }}
+                  className="w-full px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-zinc-300 hover:text-white hover:bg-zinc-800/80 transition-all flex items-center gap-2"
+                >
+                  <span className="inline-flex w-6 h-6 items-center justify-center rounded-full border border-zinc-700 text-[11px] font-black">
+                    {lang === 'zh' ? 'EN' : '中'}
+                  </span>
+                  {t.languageToggle}
+                </button>
+                {activeSection === 'library' && videos.length > 0 && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setIsQuickMenuOpen(false);
+                      clearLibrary();
+                    }}
+                    className={`w-full px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 ${
+                      isConfirmingClear ? 'bg-red-600/20 text-red-200 hover:bg-red-600/30' : 'text-zinc-300 hover:text-white hover:bg-zinc-800/80'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6" /></svg>
+                    {isConfirmingClear ? t.confirmClear : t.clearList}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -523,6 +773,7 @@ const App: React.FC = () => {
                   >
                     <option value={SortMode.NEWEST}>{t.sortByDate}</option>
                     <option value={SortMode.SIZE}>{t.sortBySize}</option>
+                    <option value={SortMode.CLICKS}>{t.sortByClicks}</option>
                     <option value={SortMode.RANDOM}>{t.sortByRandom}</option>
                   </select>
                 </div>
@@ -534,6 +785,7 @@ const App: React.FC = () => {
                 <VideoCard 
                   key={video.id} 
                   video={video} 
+                  clickCount={video.clickCount ?? 0}
                   onClick={(v: { id: string; }) => handleOpenVideo(v.id)}
                   onMetadataLoaded={updateMetadata}
                 />

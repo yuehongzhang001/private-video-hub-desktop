@@ -9,6 +9,7 @@ export interface VideoItem {
   lastModified: number;
   thumbnail?: string;
   duration?: number;
+  clickCount?: number;
   isProcessing?: boolean;
 }
 
@@ -16,6 +17,7 @@ export enum SortMode {
   AFTER_CURRENT = 'next',
   NEWEST = 'newest',
   SIZE = 'size',
+  CLICKS = 'clicks',
   RANDOM = 'random'
 }
 

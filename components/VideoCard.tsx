@@ -7,11 +7,12 @@ import { mpvController } from '../services/MpvController';
 
 interface VideoCardProps {
   video: VideoItem;
+  clickCount: number;
   onClick: (video: VideoItem) => void;
   onMetadataLoaded: (id: string, thumbnail: string, duration: number) => void;
 }
 
-export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: VideoCardProps) => {
+export const VideoCard = React.memo(({ video, clickCount, onClick, onMetadataLoaded }: VideoCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
@@ -319,8 +320,12 @@ export const VideoCard = React.memo(({ video, onClick, onMetadataLoaded }: Video
           {video.name}
         </h3>
         <div className="flex items-center justify-between mt-2">
-          <p className="text-xs text-zinc-500 font-bold uppercase tracking-tight">
-            {(video.size / (1024 * 1024)).toFixed(1)} MB
+          <p className="text-xs text-zinc-500 font-bold uppercase tracking-tight flex items-center gap-1">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+              <circle cx="12" cy="12" r="3" strokeWidth={2.5} />
+            </svg>
+            {clickCount}
           </p>
           <div className="text-[10px] text-zinc-600 font-black uppercase tracking-widest">{videoExt}</div>
         </div>

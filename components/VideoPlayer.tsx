@@ -184,6 +184,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const mpvCanvasRef = useRef<HTMLCanvasElement>(null);
+  const infoPopoverRef = useRef<HTMLDivElement>(null);
   const hideControlsTimer = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastMpvPollRef = useRef(0);
@@ -212,6 +213,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const [mpvDebug, setMpvDebug] = useState<string | null>(null);
   const [mpvTime, setMpvTime] = useState<number | null>(null);
   const [mpvDuration, setMpvDuration] = useState<number | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
   const electronAPI = window.electronAPI;
   const preferMpv = mpvController.canUse();
   const mpvOwnerRef = useRef<string>(`player-${Math.random().toString(36).slice(2)}`);
@@ -283,6 +285,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       if (pendingSeekPollTimerRef.current) window.clearTimeout(pendingSeekPollTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    setShowInfo(false);
+  }, [video.id]);
+
+  useEffect(() => {
+    if (!showInfo) return;
+    const handleClick = (event: MouseEvent) => {
+      if (!infoPopoverRef.current) return;
+      if (!infoPopoverRef.current.contains(event.target as Node)) {
+        setShowInfo(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showInfo]);
 
   useEffect(() => {
     setIsConfirmingDelete(false);
@@ -769,6 +787,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const formatFileSize = (bytes: number) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '--';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = bytes;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex += 1;
+    }
+    const precision = unitIndex === 0 || size >= 10 ? 0 : 1;
+    return `${size.toFixed(precision)} ${units[unitIndex]}`;
+  };
+
+  const getExtension = (value?: string) => {
+    if (!value) return 'VIDEO';
+    const lastSegment = value.split(/[\\/]/).pop() || value;
+    const dotIndex = lastSegment.lastIndexOf('.');
+    if (dotIndex <= 0 || dotIndex === lastSegment.length - 1) return 'VIDEO';
+    return lastSegment.slice(dotIndex + 1).toUpperCase();
+  };
+
+  const videoExt = useMemo(() => getExtension(video.name || video.path), [video.name, video.path]);
+
   const videoStyle = useMemo(() => {
     switch (displaySize) {
       case 'small': return { transform: 'scale(0.5)', boxShadow: '0 0 100px rgba(0,0,0,0.8)' };
@@ -791,7 +832,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
             {t.back}
           </button>
           <h2 className="text-white text-base font-bold truncate tracking-widest italic flex-1 mx-12 text-center">{video.name}</h2>
-          <div className={`flex items-center justify-end gap-2 ${canDelete ? 'w-64' : 'w-32'}`}>
+          <div className={`flex items-center justify-end gap-2 ${canDelete ? 'w-72' : 'w-40'}`}>
             {canDelete && (
               <button
                 type="button"
@@ -808,6 +849,39 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
                 </svg>
               </button>
             )}
+            <div ref={infoPopoverRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInfo(prev => !prev);
+                  resetHideTimer(true);
+                }}
+                aria-label={t.infoButtonLabel}
+                aria-expanded={showInfo}
+                className={`p-2 rounded-full border transition-all ${
+                  showInfo
+                    ? 'bg-indigo-600 text-white border-indigo-400 shadow-lg'
+                    : 'bg-zinc-900/80 text-zinc-400 border-zinc-700 hover:bg-zinc-800/80 hover:text-white'
+                }`}
+                title={t.infoButtonLabel}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
+                </svg>
+              </button>
+              {showInfo && (
+                <div className="absolute right-0 mt-2 w-48 rounded-xl border border-zinc-700 bg-zinc-950/95 px-4 py-3 text-xs text-zinc-200 shadow-2xl backdrop-blur-md">
+                  <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-zinc-500">
+                    <span>{t.infoFileSize}</span>
+                    <span className="text-zinc-200 font-bold">{formatFileSize(video.size)}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[10px] uppercase tracking-widest text-zinc-500">
+                    <span>{t.infoFileFormat}</span>
+                    <span className="text-zinc-200 font-bold">{videoExt}</span>
+                  </div>
+                </div>
+              )}
+            </div>
             {!isDeleted && (
               <button
                 type="button"
