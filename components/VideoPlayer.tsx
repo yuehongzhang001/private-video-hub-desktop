@@ -182,6 +182,7 @@ const PlaylistItem = React.memo(({
 export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const { video, allVideos, lang, onClose, onSelectVideo, onMetadataLoaded, onDelete, deletedNotice, playlistAnchorIndex } = props;
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoSurfaceRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const mpvCanvasRef = useRef<HTMLCanvasElement>(null);
   const infoPopoverRef = useRef<HTMLDivElement>(null);
@@ -206,6 +207,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const [rotation, setRotation] = useState(0);
+  const [surfaceAspectRatio, setSurfaceAspectRatio] = useState(16 / 9);
   const t = translations[lang];
   const [useMpv, setUseMpv] = useState(false);
   const [mpvStatus, setMpvStatus] = useState<'idle' | 'ready' | 'error'>('idle');
@@ -288,6 +291,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
 
   useEffect(() => {
     setShowInfo(false);
+  }, [video.id]);
+
+  useEffect(() => {
+    setRotation(0);
   }, [video.id]);
 
   useEffect(() => {
@@ -466,6 +473,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
     }
   }, [volume, isMuted]);
 
+  useEffect(() => {
+    const surface = videoSurfaceRef.current;
+    if (!surface || typeof ResizeObserver === 'undefined') return;
+
+    const updateAspectRatio = () => {
+      const rect = surface.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setSurfaceAspectRatio(rect.width / rect.height);
+      }
+    };
+
+    updateAspectRatio();
+    const observer = new ResizeObserver(updateAspectRatio);
+    observer.observe(surface);
+    return () => observer.disconnect();
+  }, []);
+
   const togglePlay = useCallback(() => {
     if (useMpv) {
       if (mpvStatus !== 'ready') return;
@@ -569,6 +593,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       return newVal;
     });
   }, [useMpv, mpvStatus]);
+
+  const rotate90Degrees = useCallback(() => {
+    setRotation((prev) => prev + 90);
+  }, []);
+
+  const rotateMinus90Degrees = useCallback(() => {
+    setRotation((prev) => prev - 90);
+  }, []);
 
   const handleDelete = useCallback(async () => {
     if (!canDelete || !onDelete) return;
@@ -702,7 +734,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
       if (isDeleted) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
-      const keysToHandle = [' ', 'k', 'f', 'm', 'arrowright', 'arrowleft', 'l', 'j', 'arrowup', 'arrowdown', 'escape'];
+      const keysToHandle = [' ', 'k', 'f', 'm', 'r', 'arrowright', 'arrowleft', 'l', 'j', 'arrowup', 'arrowdown', 'escape'];
       if (!keysToHandle.includes(e.key.toLowerCase())) return;
 
       const performAction = () => {
@@ -719,6 +751,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
           case 'm':
             e.preventDefault();
             toggleMute();
+            break;
+          case 'r':
+            e.preventDefault();
+            if (e.shiftKey) rotateMinus90Degrees();
+            else rotate90Degrees();
             break;
           case 'arrowright':
             e.preventDefault();
@@ -758,7 +795,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [togglePlay, toggleFullscreen, toggleMute, seek, adjustVolume, onClose, resetHideTimer, isDeleted]);
+  }, [togglePlay, toggleFullscreen, toggleMute, rotate90Degrees, rotateMinus90Degrees, seek, adjustVolume, onClose, resetHideTimer, isDeleted]);
 
   const sortedPlaylist = useMemo(() => {
     const result = [...allVideos];
@@ -811,12 +848,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
   const videoExt = useMemo(() => getExtension(video.name || video.path), [video.name, video.path]);
 
   const videoStyle = useMemo(() => {
-    switch (displaySize) {
-      case 'small': return { transform: 'scale(0.5)', boxShadow: '0 0 100px rgba(0,0,0,0.8)' };
-      case 'medium': return { transform: 'scale(0.75)', boxShadow: '0 0 80px rgba(0,0,0,0.6)' };
-      default: return { transform: 'scale(1)', boxShadow: 'none' };
-    }
-  }, [displaySize]);
+    const normalizedRotation = ((rotation % 360) + 360) % 360;
+    const baseScale = displaySize === 'small' ? 0.5 : displaySize === 'medium' ? 0.75 : 1;
+    const quarterTurn = normalizedRotation === 90 || normalizedRotation === 270;
+    const fitScale = quarterTurn ? Math.min(surfaceAspectRatio, 1 / surfaceAspectRatio) : 1;
+    const scale = baseScale * fitScale;
+    const boxShadow = displaySize === 'small'
+      ? '0 0 100px rgba(0,0,0,0.8)'
+      : displaySize === 'medium'
+        ? '0 0 80px rgba(0,0,0,0.6)'
+        : 'none';
+
+    return {
+      transform: `rotate(${rotation}deg) scale(${scale})`,
+      boxShadow
+    };
+  }, [displaySize, rotation, surfaceAspectRatio]);
 
   return (
     <div 
@@ -902,7 +949,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
         </div>
 
         {/* Video Surface */}
-        <div className="flex-1 flex items-center justify-center relative bg-zinc-950/20 overflow-hidden aspect-video md:aspect-auto">
+        <div ref={videoSurfaceRef} className="flex-1 flex items-center justify-center relative bg-zinc-950/20 overflow-hidden aspect-video md:aspect-auto">
           {isDeleted ? (
             <div className="w-full h-full flex items-center justify-center">
               <div className="max-w-md text-center px-8">
@@ -1015,6 +1062,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = (props) => {
                     className="w-20 h-1.5 bg-gray-600/25 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all opacity-0 group-hover/volume:opacity-100 focus:opacity-100 outline-none focus:outline-none" 
                   />
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => { rotateMinus90Degrees(); resetHideTimer(true); }}
+                  className="hover:text-white transition-colors"
+                  title={`${t.rotateMinus90} (Shift+R)`}
+                  aria-label={t.rotateMinus90}
+                >
+                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M20 12a8 8 0 10-1.86 5.14M20 12V6m0 6h-6" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { rotate90Degrees(); resetHideTimer(true); }}
+                  className="hover:text-white transition-colors"
+                  title={`${t.rotate90} (R)`}
+                  aria-label={t.rotate90}
+                >
+                  <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M4 12a8 8 0 111.86 5.14M4 12V6m0 6h6" />
+                  </svg>
+                </button>
               </div>
               
               <div className="flex items-center gap-2 bg-gray-800/15 border border-gray-700/15 p-1 rounded-full shadow-inner">
