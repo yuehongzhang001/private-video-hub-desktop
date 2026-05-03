@@ -31,6 +31,14 @@ Applies to `video-info-extension/` popup, content script hover tracking, and bac
   - no hover candidate collection
   - popup defaults to parsing the current page
 
+### Hover preview visibility toggle
+
+- The popup also exposes a separate toggle for whether the on-page right-side `Hover Preview` overlay is shown.
+- This toggle controls overlay visibility only.
+- Turning the overlay off must not disable candidate capture, navigation snapshot capture, or page-bound candidate matching.
+- Turning the overlay back on should allow the latest captured hover candidate to render again when available.
+- The overlay visibility preference is stored in extension local storage.
+
 ### Hover preview collection
 
 - Hover preview collection happens only from the user's currently hovered card-like element.
