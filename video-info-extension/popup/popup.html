@@ -10,41 +10,90 @@
 
 <body>
   <div class="container">
-    <header class="header"
-      style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+    <header class="header">
       <div>
-        <h1 class="title" style="margin: 0; font-size: 18px;">🎬 Video Info Parser</h1>
-        <p class="subtitle" style="margin: 5px 0 0 0; opacity: 0.8; font-size: 12px;">当前页面视频信息</p>
+        <h1 class="title">Video Info Parser</h1>
+        <p class="subtitle">当前展示什么，收藏就保存什么</p>
       </div>
-      <button id="refresh-btn" class="btn-icon"
-        style="background: none; border: none; font-size: 20px; cursor: pointer; padding: 5px;" title="重新扫描">🔄</button>
+      <button id="refresh-btn" class="icon-button" type="button" title="重新加载当前状态">↻</button>
     </header>
+
+    <section class="toggle-panel">
+      <div>
+        <p class="toggle-title">自动追踪候选视频信息</p>
+        <p class="toggle-subtitle">Auto track candidate video info</p>
+      </div>
+      <label class="switch" for="auto-track-toggle">
+        <input id="auto-track-toggle" type="checkbox">
+        <span class="switch-slider"></span>
+      </label>
+    </section>
 
     <div id="loading" class="loading">
       <div class="spinner"></div>
-      <p>正在分析页面...</p>
+      <p>正在读取候选信息和当前页面...</p>
     </div>
 
-    <div id="error" class="error hidden">
-      <p>❌ 无法分析当前页面</p>
-    </div>
+    <div id="error" class="message error hidden"></div>
+    <div id="empty" class="message empty hidden"></div>
 
-    <div id="empty" class="empty hidden">
-      <div class="empty-icon">📹</div>
-      <p>当前页面未检测到视频</p>
-    </div>
+    <section id="editor-panel" class="panel hidden">
+      <div class="panel-header">
+        <div>
+          <h2>当前收藏内容</h2>
+          <p id="active-source-text">来源：当前页面解析结果</p>
+        </div>
+        <span id="dirty-badge" class="badge hidden">已手动修改</span>
+      </div>
 
-    <div id="results" class="results hidden">
-      <!-- Video candidates will be inserted here -->
-    </div>
+      <div class="editor-thumb-wrap">
+        <img id="editor-thumb-preview" class="editor-thumb hidden" alt="Current thumbnail preview">
+        <div id="editor-thumb-placeholder" class="thumb-placeholder large">当前未设置缩略图</div>
+      </div>
 
-    <div id="images-section" class="images-section hidden">
-      <button id="toggle-images" class="btn btn-tertiary images-toggle" aria-expanded="false" type="button">
-        查看更多候选图片
+      <div class="field-grid">
+        <label class="field">
+          <span>标题</span>
+          <input id="field-title" type="text" placeholder="视频标题">
+        </label>
+        <label class="field">
+          <span>时长</span>
+          <input id="field-duration" type="text" placeholder="例如 12:34">
+        </label>
+        <label class="field field-full">
+          <span>链接</span>
+          <input id="field-url" type="url" placeholder="https://example.com/video">
+        </label>
+        <label class="field field-full">
+          <span>缩略图链接</span>
+          <input id="field-thumbnail" type="url" placeholder="https://example.com/thumb.jpg">
+        </label>
+      </div>
+
+      <div class="action-row">
+        <button id="bookmark-btn" class="btn btn-primary" type="button">收藏</button>
+        <button id="parse-btn" class="btn btn-secondary" type="button">从本页面解析</button>
+        <button id="clear-candidate-btn" class="btn btn-tertiary" type="button">清除当前页候选绑定</button>
+      </div>
+
+      <div class="action-row secondary-row">
+        <button id="copy-json-btn" class="btn btn-ghost" type="button">复制JSON</button>
+        <button id="open-url-btn" class="btn btn-ghost" type="button">打开链接</button>
+      </div>
+
+      <div class="action-row secondary-row">
+        <button id="copy-debug-logs-btn" class="btn btn-ghost" type="button">复制调试日志</button>
+        <button id="clear-debug-logs-btn" class="btn btn-ghost" type="button">清空调试日志</button>
+      </div>
+    </section>
+
+    <section id="images-section" class="images-section hidden">
+      <button id="toggle-images" class="btn btn-ghost images-toggle" aria-expanded="false" type="button">
+        从当前页选择其他图片
         <span class="chevron">▾</span>
       </button>
       <div id="image-list" class="image-list hidden"></div>
-    </div>
+    </section>
   </div>
 
   <script src="popup.js"></script>

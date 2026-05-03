@@ -1,412 +1,621 @@
-// Popup script for Private Video Hub extension
-// Handles UI rendering and user interactions
+// Popup script for Private Video Hub extension.
+// Hover preview is separate from the page-bound candidate used for bookmarking.
 
-let g_videos = [];
 const NATIVE_HOST_NAME = 'com.private_video_hub.desktop';
+const STORAGE_KEYS = {
+    autoTrackEnabled: 'autoTrackCandidateVideoInfoEnabled',
+    hoverPreview: 'hoverPreviewVideoInfo'
+};
+
+const state = {
+    activeTab: null,
+    restrictedPage: false,
+    autoTrackEnabled: false,
+    pageBoundCandidateVideoInfo: null,
+    pageSourcePreference: null,
+    pageVideoInfo: null,
+    pageImages: [],
+    currentVideoInfo: null,
+    activeSource: null,
+    dirty: false
+};
+
+const els = {};
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const loadingEl = document.getElementById('loading');
-    const errorEl = document.getElementById('error');
-    const emptyEl = document.getElementById('empty');
-    const resultsEl = document.getElementById('results');
-    const imagesSectionEl = document.getElementById('images-section');
-    const imageListEl = document.getElementById('image-list');
-    const toggleImagesBtn = document.getElementById('toggle-images');
-
-    try {
-        // Get the active tab
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-        if (!tab || !tab.id) {
-            showError();
-            return;
-        }
-
-        // Check for restricted URLs (chrome://, edge://, about:, etc.)
-        if (tab.url && (
-            tab.url.startsWith('chrome://') ||
-            tab.url.startsWith('edge://') ||
-            tab.url.startsWith('about:') ||
-            tab.url.startsWith('chrome-extension://')
-        )) {
-            showRestrictedUrlError();
-            return;
-        }
-
-        // Try to send message directly first
-        sendMessageToTab(tab.id);
-
-        // Bind refresh button
-        const refreshBtn = document.getElementById('refresh-btn');
-        if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => {
-                // Reset UI
-                loadingEl.classList.remove('hidden');
-                errorEl.classList.add('hidden');
-                emptyEl.classList.add('hidden');
-                resultsEl.classList.add('hidden');
-                resultsEl.innerHTML = ''; // Clear previous results
-                if (imagesSectionEl) {
-                    imagesSectionEl.classList.add('hidden');
-                }
-                if (imageListEl) {
-                    imageListEl.innerHTML = '';
-                    imageListEl.classList.add('hidden');
-                }
-                if (toggleImagesBtn) {
-                    toggleImagesBtn.classList.remove('expanded');
-                    toggleImagesBtn.setAttribute('aria-expanded', 'false');
-                }
-
-                sendMessageToTab(tab.id);
-            });
-        }
-
-        if (toggleImagesBtn) {
-            toggleImagesBtn.addEventListener('click', () => {
-                const isExpanded = toggleImagesBtn.classList.toggle('expanded');
-                toggleImagesBtn.setAttribute('aria-expanded', String(isExpanded));
-                if (imageListEl) {
-                    imageListEl.classList.toggle('hidden', !isExpanded);
-                }
-            });
-        }
-
-    } catch (error) {
-        console.error('Error initializing popup:', error);
-        showError();
-    }
+    cacheElements();
+    bindEvents();
+    bindStorageListeners();
+    await initializePopup();
 });
 
-/**
- * Send message to tab with retry logic and script injection
- */
-function sendMessageToTab(tabId, retryCount = 0) {
-    chrome.tabs.sendMessage(
-        tabId,
-        { action: 'extractVideoInfo' },
-        (response) => {
-            const lastError = chrome.runtime.lastError;
+function cacheElements() {
+    els.loading = document.getElementById('loading');
+    els.error = document.getElementById('error');
+    els.empty = document.getElementById('empty');
+    els.refreshBtn = document.getElementById('refresh-btn');
+    els.autoTrackToggle = document.getElementById('auto-track-toggle');
 
-            if (lastError) {
-                console.log('Message failed, attempting to inject script:', lastError.message);
+    els.editorPanel = document.getElementById('editor-panel');
+    els.activeSourceText = document.getElementById('active-source-text');
+    els.dirtyBadge = document.getElementById('dirty-badge');
+    els.editorThumbPreview = document.getElementById('editor-thumb-preview');
+    els.editorThumbPlaceholder = document.getElementById('editor-thumb-placeholder');
 
-                // If we haven't retried yet, try injecting the script
-                if (retryCount === 0) {
-                    chrome.scripting.executeScript({
-                        target: { tabId: tabId },
-                        files: ['content.js']
-                    }).then(() => {
-                        // Retry sending message after injection
-                        setTimeout(() => sendMessageToTab(tabId, retryCount + 1), 100);
-                    }).catch(err => {
-                        console.error('Script injection failed:', err);
-                        showError();
-                    });
-                    return;
-                }
+    els.fieldTitle = document.getElementById('field-title');
+    els.fieldDuration = document.getElementById('field-duration');
+    els.fieldUrl = document.getElementById('field-url');
+    els.fieldThumbnail = document.getElementById('field-thumbnail');
 
-                // If we already retried or injection failed
-                showError();
-                return;
+    els.bookmarkBtn = document.getElementById('bookmark-btn');
+    els.parseBtn = document.getElementById('parse-btn');
+    els.clearCandidateBtn = document.getElementById('clear-candidate-btn');
+    els.copyJsonBtn = document.getElementById('copy-json-btn');
+    els.openUrlBtn = document.getElementById('open-url-btn');
+    els.copyDebugLogsBtn = document.getElementById('copy-debug-logs-btn');
+    els.clearDebugLogsBtn = document.getElementById('clear-debug-logs-btn');
+
+    els.imagesSection = document.getElementById('images-section');
+    els.toggleImagesBtn = document.getElementById('toggle-images');
+    els.imageList = document.getElementById('image-list');
+}
+
+function setActiveTabState(tab) {
+    state.activeTab = tab || null;
+    state.restrictedPage = isRestrictedUrl(tab?.url || '');
+}
+
+function applyExtensionState(extensionState) {
+    state.autoTrackEnabled = Boolean(extensionState?.autoTrackEnabled);
+    state.pageBoundCandidateVideoInfo = extensionState?.pageBoundCandidateVideoInfo || null;
+    state.pageSourcePreference = extensionState?.pageSourcePreference || null;
+    els.autoTrackToggle.checked = state.autoTrackEnabled;
+}
+
+function resetPageExtractionState() {
+    state.pageVideoInfo = null;
+    state.pageImages = [];
+}
+
+function setAutoTrackDisabledState() {
+    state.pageBoundCandidateVideoInfo = null;
+    state.pageSourcePreference = null;
+}
+
+function shouldUsePageVideoByDefault() {
+    return !state.autoTrackEnabled || state.activeSource === 'page';
+}
+
+function bindEvents() {
+    els.refreshBtn.addEventListener('click', () => {
+        initializePopup({ preserveDirtyForm: false });
+    });
+
+    els.autoTrackToggle.addEventListener('change', async () => {
+        const enabled = Boolean(els.autoTrackToggle.checked);
+        const previous = state.autoTrackEnabled;
+
+        try {
+            await sendRuntimeMessage({ action: 'setAutoTrackEnabled', enabled });
+
+            state.autoTrackEnabled = enabled;
+            if (!enabled) {
+                setAutoTrackDisabledState();
             }
 
-            if (response && response.videos && response.videos.length > 0) {
-                displayVideos(response.videos);
-            } else {
-                showEmpty();
+            if (!state.dirty) {
+                applyPreferredSource();
             }
 
-            if (response && response.pageImages) {
-                updateImageSection(response.pageImages);
-            }
+            render();
+        } catch (error) {
+            console.error('Failed to update auto-track toggle:', error);
+            state.autoTrackEnabled = previous;
+            els.autoTrackToggle.checked = previous;
+            showToast('❌ 开关更新失败');
         }
+    });
+
+    [els.fieldTitle, els.fieldDuration, els.fieldUrl, els.fieldThumbnail].forEach((input) => {
+        input.addEventListener('input', handleFieldInput);
+    });
+
+    els.bookmarkBtn.addEventListener('click', handleBookmark);
+    els.parseBtn.addEventListener('click', handleParseCurrentPage);
+    els.clearCandidateBtn.addEventListener('click', handleClearPageBoundCandidate);
+    els.copyJsonBtn.addEventListener('click', handleCopyJson);
+    els.copyDebugLogsBtn.addEventListener('click', handleCopyDebugLogs);
+    els.clearDebugLogsBtn.addEventListener('click', handleClearDebugLogs);
+    els.openUrlBtn.addEventListener('click', () => {
+        const url = normalizeUrl(state.currentVideoInfo?.url);
+        if (!url) {
+            showToast('❌ 当前没有可打开的链接');
+            return;
+        }
+        chrome.tabs.create({ url });
+    });
+
+    els.toggleImagesBtn.addEventListener('click', () => {
+        const expanded = els.toggleImagesBtn.getAttribute('aria-expanded') === 'true';
+        els.toggleImagesBtn.setAttribute('aria-expanded', String(!expanded));
+        els.imageList.classList.toggle('hidden', expanded);
+    });
+}
+
+function bindStorageListeners() {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName === 'local' && changes[STORAGE_KEYS.autoTrackEnabled]) {
+            state.autoTrackEnabled = Boolean(changes[STORAGE_KEYS.autoTrackEnabled].newValue);
+            els.autoTrackToggle.checked = state.autoTrackEnabled;
+
+            if (!state.autoTrackEnabled) {
+                setAutoTrackDisabledState();
+                if (!state.dirty) {
+                    applyPreferredSource();
+                }
+            }
+
+            render();
+        }
+    });
+}
+
+async function initializePopup(options = {}) {
+    const { preserveDirtyForm = false } = options;
+
+    showLoading();
+
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        setActiveTabState(tab);
+
+        const extensionState = await sendRuntimeMessage({
+            action: 'getExtensionState',
+            pageUrl: tab?.url || ''
+        });
+        applyExtensionState(extensionState);
+
+        if (!state.restrictedPage && tab?.id) {
+            try {
+                const response = await extractCurrentPageVideoInfo(tab.id);
+                const firstVideo = Array.isArray(response?.videos) ? response.videos[0] : null;
+                state.pageVideoInfo = firstVideo ? normalizeVideoInfo(firstVideo, 'page') : null;
+                state.pageImages = Array.isArray(response?.pageImages) ? response.pageImages : [];
+            } catch (error) {
+                console.warn('Current page extraction failed, continuing with extension state only:', error);
+                resetPageExtractionState();
+            }
+        } else {
+            resetPageExtractionState();
+        }
+
+        if (!preserveDirtyForm || !state.dirty) {
+            applyPreferredSource();
+        }
+
+        await appendDebugLog('popup-initialize', {
+            activeTabUrl: tab?.url || '',
+            autoTrackEnabled: state.autoTrackEnabled,
+            pageSourcePreference: state.pageSourcePreference,
+            pageBoundCandidateVideoInfo: summarizeVideoInfo(state.pageBoundCandidateVideoInfo),
+            pageVideoInfo: summarizeVideoInfo(state.pageVideoInfo),
+            currentVideoInfo: summarizeVideoInfo(state.currentVideoInfo)
+        });
+
+        render();
+    } catch (error) {
+        console.error('Failed to initialize popup:', error);
+        showError('❌ 无法读取扩展状态或当前页面');
+    }
+}
+
+function isRestrictedUrl(url) {
+    return Boolean(url) && (
+        url.startsWith('chrome://') ||
+        url.startsWith('edge://') ||
+        url.startsWith('about:') ||
+        url.startsWith('chrome-extension://')
     );
 }
 
-/**
- * Show error specifically for restricted URLs
- */
-function showRestrictedUrlError() {
-    const loadingEl = document.getElementById('loading');
-    const errorEl = document.getElementById('error');
-    loadingEl.classList.add('hidden');
-    errorEl.classList.remove('hidden');
-    errorEl.innerHTML = '<p>❌ 此页面不支持扩展程序<br><small>系统页面无法注入脚本</small></p>';
-    hideImageSection();
-}
-
-/**
- * Display video candidates
- */
-function displayVideos(videos) {
-    const loadingEl = document.getElementById('loading');
-    const resultsEl = document.getElementById('results');
-
-    loadingEl.classList.add('hidden');
-    resultsEl.classList.remove('hidden');
-
-    g_videos = Array.isArray(videos) ? videos : [];
-
-    videos.forEach((video, index) => {
-        const card = createVideoCard(video, index);
-        resultsEl.appendChild(card);
-    });
-}
-
-/**
- * Create a video card element
- */
-function createVideoCard(video, index) {
-    const card = document.createElement('div');
-    card.className = 'video-card';
-    card.dataset.videoIndex = String(index);
-
-    // Debug logging
-    console.log('Creating card for video:', video);
-
-    const rawRating = Number(video.rating);
-    const normalizedRating = Number.isFinite(rawRating)
-        ? Math.max(0, Math.min(5, Math.round(rawRating)))
-        : 0;
-    video.rating = normalizedRating;
-
-    // Priority badge
-    const priorityBadge = video.priority === 1 ? '<div class="priority-badge">推荐</div>' : '';
-
-    // Thumbnail
-    const thumbnailHtml = video.thumbnailUrl
-        ? `<img src="${escapeHtml(video.thumbnailUrl)}" alt="Video thumbnail" class="video-thumbnail" onerror="this.style.display='none'">`
-        : `<div class="video-thumbnail placeholder">🎬</div>`;
-
-    // Duration - always show, with placeholder if not available
-    const durationHtml = video.duration
-        ? `<div class="video-duration">⏱️ ${escapeHtml(video.duration)}</div>`
-        : `<div class="video-duration" style="opacity: 0.5;">⏱️ 未知</div>`;
-
-    // Source badge
-    const sourceLabels = {
-        'meta-tags': 'Meta标签',
-        'video-element': 'Video元素',
-        'player-structure': '播放器'
-    };
-    const sourceLabel = sourceLabels[video.source] || '未知';
-
-    const starsHtml = Array.from({ length: 5 }, (_, i) => {
-        const starValue = i + 1;
-        const isActive = normalizedRating >= starValue ? 'active' : '';
-        return `<button class="rating-star ${isActive}" data-rating="${starValue}" type="button" aria-label="${starValue} 星">★</button>`;
-    }).join('');
-
-    card.innerHTML = `
-    ${priorityBadge}
-    ${thumbnailHtml}
-    <div class="video-info">
-      <h3 class="video-title">${escapeHtml(video.title || '未知标题')}</h3>
-      <div class="video-meta">
-        ${durationHtml}
-        <div class="video-source">📍 ${sourceLabel}</div>
-      </div>
-      <div class="video-rating" role="radiogroup" aria-label="评分">
-        <span class="rating-label">评分</span>
-        <div class="rating-stars">
-          ${starsHtml}
-        </div>
-      </div>
-      <div class="video-url">${escapeHtml(video.url || '')}</div>
-      <div class="video-actions">
-        <button class="btn btn-primary" data-action="copy-json" data-index="${index}">
-          复制JSON
-        </button>
-        <button class="btn btn-accent" data-action="send-app" data-index="${index}">
-          发送到应用
-        </button>
-        <button class="btn btn-secondary" data-action="open-url" data-index="${index}">
-          打开链接
-        </button>
-      </div>
-    </div>
-  `;
-
-    // Add event listeners
-    const copyBtn = card.querySelector('[data-action="copy-json"]');
-    const sendBtn = card.querySelector('[data-action="send-app"]');
-    const openBtn = card.querySelector('[data-action="open-url"]');
-
-    copyBtn.addEventListener('click', () => copyVideoJson(video));
-    sendBtn.addEventListener('click', () => sendVideoInfoToApp(video));
-    openBtn.addEventListener('click', () => openVideoUrl(video.url));
-
-    const starButtons = card.querySelectorAll('.rating-star');
-    starButtons.forEach((button) => {
-        button.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const ratingValue = Number(button.dataset.rating || 0);
-            if (!ratingValue) return;
-            video.rating = ratingValue;
-            starButtons.forEach((star) => {
-                const starRating = Number(star.dataset.rating || 0);
-                star.classList.toggle('active', starRating <= ratingValue);
-            });
-        });
-    });
-
-    return card;
-}
-
-function getTargetVideoIndex() {
-    if (!g_videos.length) return -1;
-    const preferredIndex = g_videos.findIndex(video => video && video.priority === 1);
-    return preferredIndex >= 0 ? preferredIndex : 0;
-}
-
-function updateVideoThumbnail(index, imageUrl) {
-    if (index < 0 || index >= g_videos.length) return;
-    g_videos[index].thumbnailUrl = imageUrl;
-
-    const resultsEl = document.getElementById('results');
-    if (!resultsEl) return;
-
-    const card = resultsEl.querySelector(`[data-video-index="${index}"]`);
-    if (!card) return;
-
-    const existingThumb = card.querySelector('.video-thumbnail');
-    if (existingThumb && existingThumb.tagName.toLowerCase() === 'img') {
-        existingThumb.src = imageUrl;
-        existingThumb.style.display = '';
-    } else {
-        const img = document.createElement('img');
-        img.src = imageUrl;
-        img.alt = 'Video thumbnail';
-        img.className = 'video-thumbnail';
-        img.onerror = () => {
-            img.style.display = 'none';
-        };
-
-        if (existingThumb) {
-            existingThumb.replaceWith(img);
-        } else {
-            card.prepend(img);
-        }
+function normalizeUrl(url) {
+    if (!url) return '';
+    try {
+        const parsed = new URL(url);
+        parsed.hash = '';
+        return parsed.href;
+    } catch (error) {
+        return String(url).trim();
     }
 }
 
-/**
- * Copy video data as JSON to clipboard
- */
-function copyVideoJson(video) {
-    const jsonData = {
-        title: video.title,
-        url: video.url,
-        duration: video.duration,
-        thumbnailUrl: video.thumbnailUrl,
-        siteName: video.siteName,
-        siteIconUrl: video.siteIconUrl,
-        rating: video.rating
+function buildPageMatchKeys(url) {
+    const normalized = normalizeUrl(url);
+    if (!normalized) return { matchKey: '', looseMatchKey: '' };
+
+    try {
+        const parsed = new URL(normalized);
+        return {
+            matchKey: `${parsed.origin}${parsed.pathname}${parsed.search}`,
+            looseMatchKey: `${parsed.origin}${parsed.pathname}`
+        };
+    } catch (error) {
+        return { matchKey: normalized, looseMatchKey: normalized };
+    }
+}
+
+function normalizeVideoInfo(video, source) {
+    if (!video) return null;
+    return {
+        title: video.title || '',
+        url: video.url || video.detailPageUrl || '',
+        detailPageUrl: video.detailPageUrl || video.url || '',
+        thumbnailUrl: video.thumbnailUrl || '',
+        duration: video.duration || '',
+        siteName: video.siteName || '',
+        siteIconUrl: video.siteIconUrl || '',
+        rating: Number.isFinite(Number(video.rating)) ? Math.max(0, Math.min(5, Math.round(Number(video.rating)))) : 0,
+        source
     };
+}
 
-    const jsonString = JSON.stringify(jsonData, null, 2);
+function summarizeVideoInfo(video) {
+    if (!video) return null;
+    return {
+        title: video.title || '',
+        detailPageUrl: video.detailPageUrl || video.url || '',
+        thumbnailUrl: video.thumbnailUrl || '',
+        duration: video.duration || '',
+        source: video.source || '',
+        sourceLabel: video.sourceLabel || ''
+    };
+}
 
-    navigator.clipboard.writeText(jsonString).then(() => {
+async function appendDebugLog(event, data) {
+    try {
+        await sendRuntimeMessage({
+            action: 'appendDebugLog',
+            source: 'popup',
+            event,
+            data
+        });
+    } catch (error) {
+        console.debug('Failed to append popup debug log:', error);
+    }
+}
+
+function cloneVideoInfo(video) {
+    return video ? { ...video } : null;
+}
+
+function getPageBoundCandidateAsVideoInfo() {
+    return normalizeVideoInfo(state.pageBoundCandidateVideoInfo, 'candidate');
+}
+
+function applyPreferredSource() {
+    const boundCandidateVideo = getPageBoundCandidateAsVideoInfo();
+    const pageVideo = state.pageVideoInfo ? cloneVideoInfo(state.pageVideoInfo) : null;
+
+    if (!state.autoTrackEnabled) {
+        state.currentVideoInfo = pageVideo;
+        state.activeSource = state.currentVideoInfo ? 'page' : null;
+        state.dirty = false;
+        return;
+    }
+
+    if (state.pageSourcePreference === 'candidate' && boundCandidateVideo) {
+        state.currentVideoInfo = cloneVideoInfo(boundCandidateVideo);
+        state.activeSource = 'candidate';
+    } else if (state.pageSourcePreference === 'page') {
+        state.currentVideoInfo = pageVideo;
+        state.activeSource = 'page';
+    } else if (state.pageSourcePreference === 'none') {
+        state.currentVideoInfo = null;
+        state.activeSource = 'none';
+    } else if (boundCandidateVideo) {
+        state.currentVideoInfo = cloneVideoInfo(boundCandidateVideo);
+        state.activeSource = 'candidate';
+    } else if (pageVideo) {
+        state.currentVideoInfo = pageVideo;
+        state.activeSource = 'page';
+    } else {
+        state.currentVideoInfo = null;
+        state.activeSource = null;
+    }
+
+    state.dirty = false;
+}
+
+function syncCurrentVideoFromFields() {
+    if (!state.currentVideoInfo) {
+        state.currentVideoInfo = normalizeVideoInfo({}, state.activeSource || 'manual');
+    }
+
+    state.currentVideoInfo.title = els.fieldTitle.value.trim();
+    state.currentVideoInfo.duration = els.fieldDuration.value.trim();
+    state.currentVideoInfo.url = els.fieldUrl.value.trim();
+    state.currentVideoInfo.detailPageUrl = state.currentVideoInfo.url;
+    state.currentVideoInfo.thumbnailUrl = els.fieldThumbnail.value.trim();
+}
+
+function handleFieldInput() {
+    syncCurrentVideoFromFields();
+    state.dirty = true;
+    renderEditorMeta();
+    renderThumbnailPreview();
+    renderActionStates();
+}
+
+async function handleParseCurrentPage() {
+    if (state.restrictedPage || !state.activeTab?.id) {
+        showToast('❌ 当前页面无法重新解析');
+        return;
+    }
+
+    els.parseBtn.disabled = true;
+
+    try {
+        const response = await extractCurrentPageVideoInfo(state.activeTab.id);
+        const firstVideo = Array.isArray(response?.videos) ? response.videos[0] : null;
+        state.pageVideoInfo = firstVideo ? normalizeVideoInfo(firstVideo, 'page') : null;
+        state.pageImages = Array.isArray(response?.pageImages) ? response.pageImages : [];
+
+        if (!state.pageVideoInfo) {
+            showToast('❌ 当前页面没有解析到可用视频信息');
+            render();
+            return;
+        }
+
+        if (state.autoTrackEnabled && state.activeTab?.url) {
+            await sendRuntimeMessage({
+                action: 'setPageSourcePreference',
+                pageUrl: state.activeTab.url,
+                sourcePreference: 'page'
+            });
+            state.pageSourcePreference = 'page';
+        }
+
+        state.currentVideoInfo = cloneVideoInfo(state.pageVideoInfo);
+        state.activeSource = 'page';
+        state.dirty = false;
+        await appendDebugLog('parse-current-page', {
+            activeTabUrl: state.activeTab?.url || '',
+            pageVideoInfo: summarizeVideoInfo(state.pageVideoInfo)
+        });
+        render();
+        showToast('✅ 已切换为当前页面解析结果');
+    } catch (error) {
+        console.error('Failed to parse current page:', error);
+        showToast('❌ 当前页面解析失败');
+    } finally {
+        els.parseBtn.disabled = false;
+    }
+}
+
+async function handleClearPageBoundCandidate() {
+    if (!state.activeTab?.url) {
+        return;
+    }
+
+    try {
+        await sendRuntimeMessage({
+            action: 'clearPageBoundCandidateVideoInfo',
+            pageUrl: state.activeTab.url
+        });
+
+        state.pageBoundCandidateVideoInfo = null;
+
+        if (state.activeSource === 'page') {
+            state.pageSourcePreference = 'page';
+        } else {
+            state.pageSourcePreference = 'none';
+            state.currentVideoInfo = null;
+            state.activeSource = 'none';
+            state.dirty = false;
+        }
+
+        render();
+        await appendDebugLog('clear-page-bound-candidate', {
+            activeTabUrl: state.activeTab?.url || '',
+            activeSource: state.activeSource
+        });
+        showToast('✅ 已清除当前页面候选绑定');
+    } catch (error) {
+        console.error('Failed to clear page-bound candidate:', error);
+        showToast('❌ 清除候选绑定失败');
+    }
+}
+
+function handleCopyJson() {
+    if (!state.currentVideoInfo) {
+        showToast('❌ 当前没有可复制的内容');
+        return;
+    }
+
+    syncCurrentVideoFromFields();
+    const json = JSON.stringify({
+        title: state.currentVideoInfo.title,
+        url: state.currentVideoInfo.url,
+        duration: state.currentVideoInfo.duration,
+        thumbnailUrl: state.currentVideoInfo.thumbnailUrl
+    }, null, 2);
+
+    navigator.clipboard.writeText(json).then(() => {
         showToast('✅ JSON已复制到剪贴板');
-    }).catch(err => {
-        console.error('Failed to copy:', err);
+    }).catch((error) => {
+        console.error('Failed to copy JSON:', error);
         showToast('❌ 复制失败');
     });
 }
 
-/**
- * Open video URL in new tab
- */
-function openVideoUrl(url) {
-    if (url) {
-        chrome.tabs.create({ url: url });
+async function handleCopyDebugLogs() {
+    try {
+        const response = await sendRuntimeMessage({ action: 'getDebugLogs' });
+        const payload = {
+            exportedAt: new Date().toISOString(),
+            activeTabUrl: state.activeTab?.url || '',
+            autoTrackEnabled: state.autoTrackEnabled,
+            pageSourcePreference: state.pageSourcePreference,
+            pageBoundCandidateVideoInfo: summarizeVideoInfo(state.pageBoundCandidateVideoInfo),
+            pageVideoInfo: summarizeVideoInfo(state.pageVideoInfo),
+            currentVideoInfo: summarizeVideoInfo(state.currentVideoInfo),
+            logs: Array.isArray(response?.logs) ? response.logs : []
+        };
+
+        await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+        showToast('✅ 调试日志已复制到剪贴板');
+    } catch (error) {
+        console.error('Failed to copy debug logs:', error);
+        showToast('❌ 复制调试日志失败');
     }
 }
 
-/**
- * Show error state
- */
-function showError() {
-    document.getElementById('loading').classList.add('hidden');
-    document.getElementById('error').classList.remove('hidden');
-    hideImageSection();
+async function handleClearDebugLogs() {
+    try {
+        await sendRuntimeMessage({ action: 'clearDebugLogs' });
+        showToast('✅ 调试日志已清空');
+    } catch (error) {
+        console.error('Failed to clear debug logs:', error);
+        showToast('❌ 清空调试日志失败');
+    }
 }
 
-/**
- * Show empty state
- */
-function showEmpty() {
-    document.getElementById('loading').classList.add('hidden');
-    document.getElementById('empty').classList.remove('hidden');
-}
+function handleBookmark() {
+    if (!state.currentVideoInfo) {
+        showToast('❌ 当前没有可收藏的视频信息');
+        return;
+    }
 
-/**
- * Send video data to desktop app via native messaging
- */
-function sendVideoInfoToApp(video) {
+    syncCurrentVideoFromFields();
+
     const payload = {
-        title: video.title,
-        url: video.url,
-        duration: video.duration,
-        thumbnailUrl: video.thumbnailUrl,
-        siteName: video.siteName,
-        siteIconUrl: video.siteIconUrl,
-        rating: video.rating
+        title: state.currentVideoInfo.title,
+        url: state.currentVideoInfo.url,
+        duration: state.currentVideoInfo.duration,
+        thumbnailUrl: state.currentVideoInfo.thumbnailUrl
     };
+
+    if (!payload.url) {
+        showToast('❌ 收藏前请先确认链接');
+        return;
+    }
 
     chrome.runtime.sendNativeMessage(
         NATIVE_HOST_NAME,
         { type: 'favorite', favorite: payload },
-        (response) => {
+        async (response) => {
             const lastError = chrome.runtime.lastError;
             if (lastError) {
                 console.error('Native messaging failed:', lastError.message);
+                await appendDebugLog('bookmark-native-error', {
+                    activeTabUrl: state.activeTab?.url || '',
+                    activeSource: state.activeSource,
+                    payload: summarizeVideoInfo(payload),
+                    error: lastError.message
+                });
                 showToast('❌ 未连接到本地应用');
                 return;
             }
+
             if (response && response.ok) {
+                await appendDebugLog('bookmark-sent', {
+                    activeTabUrl: state.activeTab?.url || '',
+                    activeSource: state.activeSource,
+                    payload: summarizeVideoInfo(payload),
+                    response
+                });
                 showToast('✅ 已发送到应用');
             } else {
+                await appendDebugLog('bookmark-failed', {
+                    activeTabUrl: state.activeTab?.url || '',
+                    activeSource: state.activeSource,
+                    payload: summarizeVideoInfo(payload),
+                    response
+                });
                 showToast('❌ 发送失败');
             }
         }
     );
 }
 
-/**
- * Update page images section
- */
-function updateImageSection(images) {
-    const imagesSectionEl = document.getElementById('images-section');
-    const imageListEl = document.getElementById('image-list');
-    const toggleImagesBtn = document.getElementById('toggle-images');
+function render() {
+    hideMessages();
 
-    if (!imagesSectionEl || !imageListEl || !toggleImagesBtn) return;
+    els.autoTrackToggle.checked = state.autoTrackEnabled;
 
-    if (!images || images.length === 0) {
-        imagesSectionEl.classList.add('hidden');
-        imageListEl.classList.add('hidden');
-        toggleImagesBtn.classList.remove('expanded');
-        toggleImagesBtn.setAttribute('aria-expanded', 'false');
+    els.editorPanel.classList.remove('hidden');
+    populateEditorFields();
+    renderEditorMeta();
+    renderThumbnailPreview();
+    renderImageSection();
+    renderActionStates();
+
+    const shouldShowEmpty = !state.currentVideoInfo;
+    const emptyText = state.autoTrackEnabled
+        ? '当前页面还没有绑定候选信息。你可以继续 hover 列表视频，或点击“从本页面解析”。'
+        : '自动追踪关闭时，当前页面默认使用“从本页面解析”结果。';
+
+    if (shouldShowEmpty) {
+        showEmpty(emptyText);
+    }
+
+    els.loading.classList.add('hidden');
+}
+
+function populateEditorFields() {
+    const video = state.currentVideoInfo || {};
+    els.fieldTitle.value = video.title || '';
+    els.fieldDuration.value = video.duration || '';
+    els.fieldUrl.value = video.url || '';
+    els.fieldThumbnail.value = video.thumbnailUrl || '';
+}
+
+function renderEditorMeta() {
+    const dirtySuffix = state.dirty ? '（已手动修改）' : '';
+    let sourceLabel = '来源：当前页面尚未绑定候选信息';
+
+    if (shouldUsePageVideoByDefault()) {
+        sourceLabel = '来源：当前页面解析结果';
+    } else if (state.activeSource === 'candidate') {
+        sourceLabel = '来源：当前页面绑定的候选信息';
+    } else if (state.activeSource === 'none') {
+        sourceLabel = '来源：当前页面暂无绑定候选信息';
+    }
+
+    els.activeSourceText.textContent = `${sourceLabel}${dirtySuffix}`;
+    els.dirtyBadge.classList.toggle('hidden', !state.dirty);
+}
+
+function renderThumbnailPreview() {
+    renderImageOrPlaceholder(
+        state.currentVideoInfo?.thumbnailUrl,
+        els.editorThumbPreview,
+        els.editorThumbPlaceholder
+    );
+}
+
+function renderImageSection() {
+    const hasImages = Array.isArray(state.pageImages) && state.pageImages.length > 0;
+    els.imagesSection.classList.toggle('hidden', !hasImages);
+
+    if (!hasImages) {
+        els.imageList.innerHTML = '';
+        els.imageList.classList.add('hidden');
+        els.toggleImagesBtn.setAttribute('aria-expanded', 'false');
         return;
     }
 
-    imagesSectionEl.classList.remove('hidden');
-    imageListEl.innerHTML = '';
-    imageListEl.classList.add('hidden');
-    toggleImagesBtn.classList.remove('expanded');
-    toggleImagesBtn.setAttribute('aria-expanded', 'false');
-
+    els.imageList.innerHTML = '';
     const fragment = document.createDocumentFragment();
-    images.forEach((url, index) => {
+
+    state.pageImages.forEach((url, index) => {
         const item = document.createElement('div');
         item.className = 'page-image';
         item.tabIndex = 0;
 
         const img = document.createElement('img');
         img.src = url;
-        img.alt = `Image ${index + 1}`;
+        img.alt = `Page image ${index + 1}`;
         img.loading = 'lazy';
         img.onerror = () => {
             item.style.display = 'none';
@@ -414,15 +623,9 @@ function updateImageSection(images) {
 
         item.appendChild(img);
         item.addEventListener('click', () => {
-            const targetIndex = getTargetVideoIndex();
-            updateVideoThumbnail(targetIndex, url);
-            if (imageListEl) {
-                imageListEl.classList.add('hidden');
-            }
-            if (toggleImagesBtn) {
-                toggleImagesBtn.classList.remove('expanded');
-                toggleImagesBtn.setAttribute('aria-expanded', 'false');
-            }
+            els.fieldThumbnail.value = url;
+            handleFieldInput();
+            showToast('✅ 已将当前图片设置为缩略图');
         });
         item.addEventListener('keydown', (event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -430,33 +633,115 @@ function updateImageSection(images) {
                 item.click();
             }
         });
+
         fragment.appendChild(item);
     });
 
-    imageListEl.appendChild(fragment);
+    els.imageList.appendChild(fragment);
 }
 
-function hideImageSection() {
-    const imagesSectionEl = document.getElementById('images-section');
-    const imageListEl = document.getElementById('image-list');
-    const toggleImagesBtn = document.getElementById('toggle-images');
+function renderActionStates() {
+    const hasCurrentVideo = Boolean(state.currentVideoInfo);
+    const hasCurrentUrl = Boolean(state.currentVideoInfo?.url);
+    const hasPageBoundCandidate = Boolean(state.pageBoundCandidateVideoInfo);
 
-    if (imagesSectionEl) imagesSectionEl.classList.add('hidden');
-    if (imageListEl) {
-        imageListEl.innerHTML = '';
-        imageListEl.classList.add('hidden');
-    }
-    if (toggleImagesBtn) {
-        toggleImagesBtn.classList.remove('expanded');
-        toggleImagesBtn.setAttribute('aria-expanded', 'false');
+    els.bookmarkBtn.disabled = !hasCurrentVideo || !hasCurrentUrl;
+    els.copyJsonBtn.disabled = !hasCurrentVideo;
+    els.openUrlBtn.disabled = !hasCurrentUrl;
+    els.copyDebugLogsBtn.disabled = false;
+    els.clearDebugLogsBtn.disabled = false;
+    els.clearCandidateBtn.disabled = !hasPageBoundCandidate;
+    els.parseBtn.disabled = state.restrictedPage || !state.activeTab?.id;
+}
+
+function renderImageOrPlaceholder(url, imageEl, placeholderEl) {
+    if (url) {
+        imageEl.src = url;
+        imageEl.classList.remove('hidden');
+        placeholderEl.classList.add('hidden');
+        imageEl.onerror = () => {
+            imageEl.classList.add('hidden');
+            placeholderEl.classList.remove('hidden');
+        };
+    } else {
+        imageEl.removeAttribute('src');
+        imageEl.classList.add('hidden');
+        placeholderEl.classList.remove('hidden');
     }
 }
 
-/**
- * Show toast notification
- */
+function showLoading() {
+    els.loading.classList.remove('hidden');
+    els.error.classList.add('hidden');
+    els.empty.classList.add('hidden');
+    els.editorPanel.classList.add('hidden');
+    els.imagesSection.classList.add('hidden');
+}
+
+function hideMessages() {
+    els.error.classList.add('hidden');
+    els.empty.classList.add('hidden');
+}
+
+function showError(message) {
+    els.loading.classList.add('hidden');
+    els.error.classList.remove('hidden');
+    els.error.textContent = message;
+}
+
+function showEmpty(message) {
+    els.empty.classList.remove('hidden');
+    els.empty.textContent = message;
+}
+
+function sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(message, (response) => {
+            const lastError = chrome.runtime.lastError;
+            if (lastError) {
+                reject(new Error(lastError.message));
+                return;
+            }
+
+            if (response && response.ok === false) {
+                reject(new Error(response.error || 'Extension message failed'));
+                return;
+            }
+
+            resolve(response);
+        });
+    });
+}
+
+function extractCurrentPageVideoInfo(tabId) {
+    return new Promise((resolve, reject) => {
+        sendMessageToTab(tabId, 0, resolve, reject);
+    });
+}
+
+function sendMessageToTab(tabId, retryCount, resolve, reject) {
+    chrome.tabs.sendMessage(
+        tabId,
+        { action: 'extractVideoInfo' },
+        (response) => {
+            const lastError = chrome.runtime.lastError;
+
+            if (lastError) {
+                if (retryCount === 0) {
+                    setTimeout(() => sendMessageToTab(tabId, retryCount + 1, resolve, reject), 120);
+                    return;
+                }
+
+                reject(new Error(lastError.message));
+                return;
+            }
+
+            resolve(response || { videos: [], pageImages: [] });
+        }
+    );
+}
+
 function showToast(message) {
-    // Remove existing toast if any
     const existingToast = document.querySelector('.toast');
     if (existingToast) {
         existingToast.remove();
@@ -467,21 +752,12 @@ function showToast(message) {
     toast.textContent = message;
     document.body.appendChild(toast);
 
-    // Trigger animation
-    setTimeout(() => toast.classList.add('show'), 10);
+    requestAnimationFrame(() => {
+        toast.classList.add('show');
+    });
 
-    // Remove after 2 seconds
     setTimeout(() => {
         toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 2000);
-}
-
-/**
- * Escape HTML to prevent XSS
- */
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+        setTimeout(() => toast.remove(), 220);
+    }, 2200);
 }

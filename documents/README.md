@@ -20,7 +20,7 @@ They should first check this index, then open only the documents relevant to the
 
 ### Features
 
-- TODO: add feature-specific behavior documents when future work will need the same rules again.
+- [Extension Auto Candidate Tracking](./extension-auto-candidate-tracking.md): popup source priority, hover candidate privacy boundaries, and save behavior for the browser extension.
 
 ### Testing
 
