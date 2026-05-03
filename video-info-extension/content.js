@@ -13,6 +13,7 @@
 
     const STORAGE_KEYS = {
         autoTrackEnabled: 'autoTrackCandidateVideoInfoEnabled',
+        hoverPreviewVisible: 'hoverPreviewVisibleEnabled',
         hoverPreview: 'hoverPreviewVideoInfo',
         pendingNavigationCandidate: 'pendingNavigationCandidateVideoInfo'
     };
@@ -22,6 +23,7 @@ const HOVER_PREVIEW_OVERLAY_ID = 'vhub-hover-preview-overlay';
 const HOVER_PREVIEW_STYLE_ID = 'vhub-hover-preview-style';
 
 let g_autoTrackEnabled = false;
+let g_hoverPreviewVisible = true;
 let g_hoverTimer = null;
 let g_lastHoverTarget = null;
 let g_lastCandidateSignature = '';
@@ -423,7 +425,15 @@ function isLikelyVideoDetailUrl(url) {
 
     try {
         const parsed = new URL(url);
-        return /\/vodplay\/\d+-\d+-\d+\/?$/i.test(parsed.pathname);
+        if (/\/vodplay\/\d+-\d+-\d+\/?$/i.test(parsed.pathname)) {
+            return true;
+        }
+
+        if (/\/view_video\.php$/i.test(parsed.pathname) && parsed.searchParams.has('viewkey')) {
+            return true;
+        }
+
+        return false;
     } catch (error) {
         return false;
     }
@@ -1394,6 +1404,16 @@ function ensureHoverPreviewOverlay() {
  * Render the on-page hover preview overlay.
  */
 function renderHoverPreviewOverlay(candidate) {
+    if (!g_hoverPreviewVisible) {
+        appendDebugLog('hover-preview-render-skipped', {
+            pageUrl: normalizePageUrl(window.location.href),
+            reason: 'visibility-disabled',
+            candidate: summarizeVideoInfo(candidate)
+        });
+        hideHoverPreviewOverlay();
+        return;
+    }
+
     const overlayEls = ensureHoverPreviewOverlay();
     if (!overlayEls) return;
 
@@ -1583,28 +1603,52 @@ function scheduleHoverTracking(target) {
  */
 function initializeAutoTrackState() {
     runWithExtensionContext(() => {
-        chrome.storage.local.get(STORAGE_KEYS.autoTrackEnabled, (stored) => {
+        chrome.storage.local.get([STORAGE_KEYS.autoTrackEnabled, STORAGE_KEYS.hoverPreviewVisible], (stored) => {
             if (!isExtensionContextActive()) return;
             g_autoTrackEnabled = Boolean(stored[STORAGE_KEYS.autoTrackEnabled]);
+            g_hoverPreviewVisible = stored[STORAGE_KEYS.hoverPreviewVisible] !== false;
             if (g_autoTrackEnabled) {
                 resolvePageBoundCandidateForCurrentPage();
             } else {
+                hideHoverPreviewOverlay();
+            }
+            if (!g_hoverPreviewVisible) {
                 hideHoverPreviewOverlay();
             }
         });
 
         chrome.storage.onChanged.addListener((changes, areaName) => {
             if (!isExtensionContextActive()) return;
-            if (areaName !== 'local' || !changes[STORAGE_KEYS.autoTrackEnabled]) return;
-            g_autoTrackEnabled = Boolean(changes[STORAGE_KEYS.autoTrackEnabled].newValue);
-        if (!g_autoTrackEnabled) {
-            g_lastCandidateSignature = '';
-            g_lastResolvedPageUrl = '';
-            g_lastHoverCandidate = null;
-            hideHoverPreviewOverlay();
-        } else {
-            resolvePageBoundCandidateForCurrentPage();
-        }
+            if (areaName !== 'local') return;
+
+            if (changes[STORAGE_KEYS.autoTrackEnabled]) {
+                g_autoTrackEnabled = Boolean(changes[STORAGE_KEYS.autoTrackEnabled].newValue);
+                appendDebugLog('auto-track-storage-changed', {
+                    pageUrl: normalizePageUrl(window.location.href),
+                    enabled: g_autoTrackEnabled
+                });
+                if (!g_autoTrackEnabled) {
+                    g_lastCandidateSignature = '';
+                    g_lastResolvedPageUrl = '';
+                    g_lastHoverCandidate = null;
+                    hideHoverPreviewOverlay();
+                } else {
+                    resolvePageBoundCandidateForCurrentPage();
+                }
+            }
+
+            if (changes[STORAGE_KEYS.hoverPreviewVisible]) {
+                g_hoverPreviewVisible = changes[STORAGE_KEYS.hoverPreviewVisible].newValue !== false;
+                appendDebugLog('hover-preview-visibility-storage-changed', {
+                    pageUrl: normalizePageUrl(window.location.href),
+                    enabled: g_hoverPreviewVisible
+                });
+                if (!g_hoverPreviewVisible) {
+                    hideHoverPreviewOverlay();
+                } else if (g_autoTrackEnabled && g_lastHoverCandidate) {
+                    renderHoverPreviewOverlay(g_lastHoverCandidate);
+                }
+            }
         });
     });
 

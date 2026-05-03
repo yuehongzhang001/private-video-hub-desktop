@@ -4,6 +4,7 @@
 const NATIVE_HOST_NAME = 'com.private_video_hub.desktop';
 const STORAGE_KEYS = {
     autoTrackEnabled: 'autoTrackCandidateVideoInfoEnabled',
+    hoverPreviewVisible: 'hoverPreviewVisibleEnabled',
     hoverPreview: 'hoverPreviewVideoInfo'
 };
 
@@ -11,6 +12,7 @@ const state = {
     activeTab: null,
     restrictedPage: false,
     autoTrackEnabled: false,
+    hoverPreviewVisible: true,
     pageBoundCandidateVideoInfo: null,
     pageSourcePreference: null,
     pageVideoInfo: null,
@@ -35,6 +37,7 @@ function cacheElements() {
     els.empty = document.getElementById('empty');
     els.refreshBtn = document.getElementById('refresh-btn');
     els.autoTrackToggle = document.getElementById('auto-track-toggle');
+    els.hoverPreviewVisibilityToggle = document.getElementById('hover-preview-visibility-toggle');
 
     els.editorPanel = document.getElementById('editor-panel');
     els.activeSourceText = document.getElementById('active-source-text');
@@ -67,9 +70,11 @@ function setActiveTabState(tab) {
 
 function applyExtensionState(extensionState) {
     state.autoTrackEnabled = Boolean(extensionState?.autoTrackEnabled);
+    state.hoverPreviewVisible = extensionState?.hoverPreviewVisible !== false;
     state.pageBoundCandidateVideoInfo = extensionState?.pageBoundCandidateVideoInfo || null;
     state.pageSourcePreference = extensionState?.pageSourcePreference || null;
     els.autoTrackToggle.checked = state.autoTrackEnabled;
+    els.hoverPreviewVisibilityToggle.checked = state.hoverPreviewVisible;
 }
 
 function resetPageExtractionState() {
@@ -116,6 +121,26 @@ function bindEvents() {
         }
     });
 
+    els.hoverPreviewVisibilityToggle.addEventListener('change', async () => {
+        const enabled = Boolean(els.hoverPreviewVisibilityToggle.checked);
+        const previous = state.hoverPreviewVisible;
+
+        try {
+            await sendRuntimeMessage({ action: 'setHoverPreviewVisibilityEnabled', enabled });
+            state.hoverPreviewVisible = enabled;
+            await appendDebugLog('popup-set-hover-preview-visibility', {
+                activeTabUrl: state.activeTab?.url || '',
+                enabled
+            });
+            render();
+        } catch (error) {
+            console.error('Failed to update hover preview visibility toggle:', error);
+            state.hoverPreviewVisible = previous;
+            els.hoverPreviewVisibilityToggle.checked = previous;
+            showToast('❌ Hover Preview 开关更新失败');
+        }
+    });
+
     [els.fieldTitle, els.fieldDuration, els.fieldUrl, els.fieldThumbnail].forEach((input) => {
         input.addEventListener('input', handleFieldInput);
     });
@@ -157,6 +182,12 @@ function bindStorageListeners() {
 
             render();
         }
+
+        if (areaName === 'local' && changes[STORAGE_KEYS.hoverPreviewVisible]) {
+            state.hoverPreviewVisible = changes[STORAGE_KEYS.hoverPreviewVisible].newValue !== false;
+            els.hoverPreviewVisibilityToggle.checked = state.hoverPreviewVisible;
+            render();
+        }
     });
 }
 
@@ -196,6 +227,7 @@ async function initializePopup(options = {}) {
         await appendDebugLog('popup-initialize', {
             activeTabUrl: tab?.url || '',
             autoTrackEnabled: state.autoTrackEnabled,
+            hoverPreviewVisible: state.hoverPreviewVisible,
             pageSourcePreference: state.pageSourcePreference,
             pageBoundCandidateVideoInfo: summarizeVideoInfo(state.pageBoundCandidateVideoInfo),
             pageVideoInfo: summarizeVideoInfo(state.pageVideoInfo),
@@ -455,6 +487,7 @@ async function handleCopyDebugLogs() {
             exportedAt: new Date().toISOString(),
             activeTabUrl: state.activeTab?.url || '',
             autoTrackEnabled: state.autoTrackEnabled,
+            hoverPreviewVisible: state.hoverPreviewVisible,
             pageSourcePreference: state.pageSourcePreference,
             pageBoundCandidateVideoInfo: summarizeVideoInfo(state.pageBoundCandidateVideoInfo),
             pageVideoInfo: summarizeVideoInfo(state.pageVideoInfo),
@@ -542,6 +575,8 @@ function render() {
     hideMessages();
 
     els.autoTrackToggle.checked = state.autoTrackEnabled;
+    els.hoverPreviewVisibilityToggle.checked = state.hoverPreviewVisible;
+    els.hoverPreviewVisibilityToggle.disabled = false;
 
     els.editorPanel.classList.remove('hidden');
     populateEditorFields();

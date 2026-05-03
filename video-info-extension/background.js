@@ -3,6 +3,7 @@
 
 const STORAGE_KEYS = {
   autoTrackEnabled: 'autoTrackCandidateVideoInfoEnabled',
+  hoverPreviewVisible: 'hoverPreviewVisibleEnabled',
   hoverPreview: 'hoverPreviewVideoInfo',
   pendingNavigationCandidate: 'pendingNavigationCandidateVideoInfo',
   pageContexts: 'pageBoundCandidateContexts',
@@ -270,6 +271,11 @@ async function getAutoTrackEnabled() {
   return Boolean(stored[STORAGE_KEYS.autoTrackEnabled]);
 }
 
+async function getHoverPreviewVisibleEnabled() {
+  const stored = await chrome.storage.local.get(STORAGE_KEYS.hoverPreviewVisible);
+  return stored[STORAGE_KEYS.hoverPreviewVisible] !== false;
+}
+
 async function getSessionState(keys) {
   return chrome.storage.session.get(keys);
 }
@@ -294,8 +300,12 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log('Private Video Hub extension installed');
 
   const stored = await chrome.storage.local.get(STORAGE_KEYS.autoTrackEnabled);
+  const hoverPreviewStored = await chrome.storage.local.get(STORAGE_KEYS.hoverPreviewVisible);
   if (typeof stored[STORAGE_KEYS.autoTrackEnabled] !== 'boolean') {
     await chrome.storage.local.set({ [STORAGE_KEYS.autoTrackEnabled]: false });
+  }
+  if (typeof hoverPreviewStored[STORAGE_KEYS.hoverPreviewVisible] !== 'boolean') {
+    await chrome.storage.local.set({ [STORAGE_KEYS.hoverPreviewVisible]: true });
   }
 });
 
@@ -306,6 +316,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     switch (request.action) {
       case 'getExtensionState': {
         const autoTrackEnabled = await getAutoTrackEnabled();
+        const hoverPreviewVisible = await getHoverPreviewVisibleEnabled();
         const sessionState = await getSessionState([
           STORAGE_KEYS.hoverPreview,
           STORAGE_KEYS.pageContexts,
@@ -320,6 +331,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           {
             pageUrl: request.pageUrl || '',
             autoTrackEnabled,
+            hoverPreviewVisible,
             pageSourcePreference: pageContext?.sourcePreference || null,
             pageBoundCandidateVideoInfo: summarizeVideoInfo(pageContext?.boundCandidateVideoInfo)
           }
@@ -329,6 +341,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({
           ok: true,
           autoTrackEnabled,
+          hoverPreviewVisible,
           pageBoundCandidateVideoInfo: pageContext?.boundCandidateVideoInfo || null,
           pageSourcePreference: pageContext?.sourcePreference || null
         });
@@ -418,6 +431,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           });
         }
         sendResponse({ ok: true, autoTrackEnabled: enabled });
+        return;
+      }
+      case 'setHoverPreviewVisibilityEnabled': {
+        const enabled = Boolean(request.enabled);
+        await chrome.storage.local.set({ [STORAGE_KEYS.hoverPreviewVisible]: enabled });
+        const sessionState = await getSessionState(STORAGE_KEYS.debugLogs);
+        await chrome.storage.session.set({
+          [STORAGE_KEYS.debugLogs]: appendDebugLog(
+            sessionState[STORAGE_KEYS.debugLogs],
+            'background',
+            'set-hover-preview-visibility-enabled',
+            { enabled }
+          )
+        });
+        sendResponse({ ok: true, hoverPreviewVisible: enabled });
         return;
       }
       case 'appendDebugLog': {
